@@ -255,3 +255,33 @@ fn help_is_plain_text() {
     assert!(out.status.success());
     assert!(String::from_utf8_lossy(&out.stdout).contains("keygen"));
 }
+
+#[test]
+fn vectors_writes_a_file() {
+    let path = std::env::temp_dir().join(format!("signer-vectors-{}.json", std::process::id()));
+    let out = path.to_str().unwrap();
+
+    let printed = ok(
+        &[
+            "vectors",
+            "--height",
+            "3",
+            "--chains",
+            "1337,11155111",
+            "--out",
+            out,
+        ],
+        None,
+    );
+    assert_eq!(printed["cases"], 22);
+    let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(file["version"], 2);
+    assert_eq!(file["root"], printed["root"]);
+    std::fs::remove_file(&path).unwrap();
+
+    let one_chain = err(
+        &["vectors", "--height", "3", "--chains", "1337", "--out", out],
+        None,
+    );
+    assert_eq!(one_chain.0, "bad_chain");
+}

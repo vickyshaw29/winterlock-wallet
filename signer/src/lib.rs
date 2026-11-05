@@ -3,4 +3,5 @@ pub mod entry;
 pub mod hash;
 pub mod scheme;
 pub mod tree;
+pub mod vectors;
 pub mod wots;

@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use signer::hash::Hash;
 use signer::scheme::{self, Reject, SignError};
 use signer::tree::{SLOTS, Tree};
-use signer::{derive, entry};
+use signer::{derive, entry, vectors};
 
 /// Signing builds the whole tree, and h = 20 already takes minutes per chain.
 const MAX_HEIGHT: u32 = 20;
@@ -51,6 +51,8 @@ enum Command {
     },
     /// Check an entry the way the account's verify frame does.
     Verify(VerifyArgs),
+    /// Write the shared test vector file, from a fixed public throwaway seed.
+    Vectors(VectorArgs),
 }
 
 #[derive(Args)]
@@ -96,6 +98,17 @@ struct VerifyArgs {
     entry: String,
 }
 
+#[derive(Args)]
+struct VectorArgs {
+    #[arg(long)]
+    height: u32,
+    /// Chain ids in slot order; at least two, so slot 1 is covered.
+    #[arg(long, value_delimiter = ',', required = true)]
+    chains: Vec<u64>,
+    #[arg(long)]
+    out: PathBuf,
+}
+
 struct Fail {
     code: &'static str,
     detail: String,
@@ -126,6 +139,7 @@ fn main() -> ExitCode {
         Command::Pubkey { tree, at } => pubkey(&tree, &at),
         Command::Sign { tree, at, msg } => sign(&tree, &at, &msg),
         Command::Verify(args) => verify(&args),
+        Command::Vectors(args) => write_vectors(&args),
     })
 }
 
@@ -241,6 +255,40 @@ fn verify(args: &VerifyArgs) -> Result<Value, Fail> {
         }
         Err(reject) => Err(fail("verify_failed", reject.reason())),
     }
+}
+
+fn write_vectors(args: &VectorArgs) -> Result<Value, Fail> {
+    let height = check_height(args.height)?;
+    if height < 2 {
+        return Err(fail("bad_height", "vectors need height 2 or more"));
+    }
+    check_chains(&args.chains)?;
+    if args.chains.len() < 2 {
+        return Err(fail(
+            "bad_chain",
+            "list at least two chains so slot 1 is covered",
+        ));
+    }
+
+    let file = vectors::generate(height, &args.chains);
+    let write = || -> std::io::Result<()> {
+        if let Some(dir) = args.out.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(&args.out, serde_json::to_string_pretty(&file)? + "\n")
+    };
+    write().map_err(|e| {
+        fail(
+            "bad_args",
+            format!("cannot write {}: {e}", args.out.display()),
+        )
+    })?;
+
+    Ok(json!({
+        "out": args.out.display().to_string(),
+        "cases": file["cases"].as_array().map_or(0, Vec::len),
+        "root": file["root"],
+    }))
 }
 
 /// --seed-file wins over PQ_SEED: an explicit flag beats the environment.
