@@ -7,32 +7,9 @@ use std::process::ExitCode;
 use clap::Parser;
 use clap::error::ErrorKind;
 use serde_json::json;
-use signer::error::Error;
+use signer::api::fail;
 
 use args::{Cli, Command};
-
-struct Fail {
-    code: &'static str,
-    detail: String,
-}
-
-fn fail(code: &'static str, detail: impl Into<String>) -> Fail {
-    Fail {
-        code,
-        detail: detail.into(),
-    }
-}
-
-impl From<Error> for Fail {
-    fn from(e: Error) -> Fail {
-        match e {
-            Error::BadVersion | Error::BadSlot | Error::RootMismatch => {
-                fail("verify_failed", e.as_str())
-            }
-            _ => fail(e.as_str(), e.to_string()),
-        }
-    }
-}
 
 fn main() -> ExitCode {
     let result = match Cli::try_parse() {

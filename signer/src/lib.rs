@@ -1,3 +1,4 @@
+pub mod api;
 pub mod codec;
 pub mod consts;
 pub mod entry;
