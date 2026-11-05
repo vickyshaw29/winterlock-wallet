@@ -29,8 +29,8 @@ pub fn masks(public_seed: &Hash) -> Masks {
 pub fn chain(x: &Hash, masks: &Masks, from: usize, steps: usize) -> Hash {
     debug_assert!(from + steps < W);
     let mut out = *x;
-    for pos in from + 1..=from + steps {
-        out = keccak(&[&xor(&out, &masks[pos])]);
+    for mask in &masks[from + 1..=from + steps] {
+        out = keccak(&[&xor(&out, mask)]);
     }
     out
 }

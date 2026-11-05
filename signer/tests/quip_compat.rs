@@ -5,6 +5,7 @@ use hashsigs_rs::{PublicKey, WOTSPlus};
 use serde_json::Value;
 use signer::hash::{Hash, keccak};
 use signer::wots::{self, Chains};
+use signer::{derive, scheme};
 
 const GOLDEN: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -103,4 +104,29 @@ fn we_accept_quip_rust_signatures() {
             "message {k}"
         );
     }
+}
+
+#[test]
+fn signature_inside_an_entry_passes_quip() {
+    let master = [5u8; 32];
+    let (generation, height, chain_id, leaf) = (0, 3, 1337, 6);
+    let msg = keccak(&[b"frame tx sig hash"]);
+
+    let entry = scheme::sign(
+        &master,
+        generation,
+        height,
+        &[chain_id],
+        chain_id,
+        leaf,
+        &msg,
+    )
+    .unwrap();
+    let index = derive::leaf_index(entry.slot, leaf, height);
+    let key = derive::leaf(&master, generation, index, chain_id);
+    let pk = PublicKey {
+        public_seed: key.public_seed,
+        public_key_hash: key.public_key_hash,
+    };
+    assert!(WOTSPlus::new(keccak256).verify(&pk, &msg, &entry.signature));
 }
