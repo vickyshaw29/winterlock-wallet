@@ -17,3 +17,7 @@ hashsigs-rs = "0.2.1"
 # Hashing dominates every test; keep it fast in debug builds.
 [profile.dev.package.tiny-keccak]
 opt-level = 3
+
+[[bench]]
+name = "ops"
+harness = false
