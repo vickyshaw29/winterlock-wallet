@@ -1,0 +1,20 @@
+{
+  "name": "@winterlock/pipeline",
+  "description": "Frame-transaction pipeline: codec, builder, signer, rpc, submit, leaves journal",
+  "type": "module",
+  "private": true,
+  "module": "src/index.ts",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "smoke": "bun scripts/smoke.ts"
+  },
+  "dependencies": {
+    "@ethereumjs/rlp": "^10.1.3",
+    "viem": "^2.57.16"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
+  }
+}
