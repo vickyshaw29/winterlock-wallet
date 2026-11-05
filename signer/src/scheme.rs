@@ -26,6 +26,18 @@ pub enum Reject {
     RootMismatch,
 }
 
+impl Reject {
+    pub fn reason(self) -> &'static str {
+        match self {
+            Reject::LeafOutOfRange => "leaf_out_of_range",
+            Reject::BadEntryLength => "bad_entry_length",
+            Reject::BadVersion => "bad_version",
+            Reject::BadSlot => "bad_slot",
+            Reject::RootMismatch => "root_mismatch",
+        }
+    }
+}
+
 /// Builds the tree (about 0.36 s per listed chain at h = 10) and signs one leaf.
 pub fn sign(
     master: &Hash,

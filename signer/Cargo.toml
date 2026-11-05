@@ -5,12 +5,14 @@ edition = "2024"
 
 [dependencies]
 tiny-keccak = { version = "2", features = ["keccak"] }
+# Used by the CLI in main.rs only; the library stays free of I/O.
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+serde_json = "1"
 
 [dev-dependencies]
 # Quip's reference implementation, AGPL: used as a test oracle only, never linked into the binary.
 hashsigs-rs = "0.2.1"
-hex = "0.4"
-serde_json = "1"
 
 # Hashing dominates every test; keep it fast in debug builds.
 [profile.dev.package.tiny-keccak]
