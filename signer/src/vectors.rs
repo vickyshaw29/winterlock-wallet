@@ -1,108 +1,86 @@
-//! The shared test vectors (format v2) that the Yul verifier and the TypeScript
-//! pipeline check against. The master seed is a public throwaway, so the file is
-//! reproducible byte for byte. Never fund an account built from it.
-
 use serde_json::{Value, json};
 
-use crate::derive;
+use crate::codec::{hex0x, words_json};
+use crate::consts::{
+    ENTRY_HEADER, LEN, SIG_BYTES, SLOT_BITS, VECTOR_MESSAGE_LABEL, VECTOR_OTHER_MESSAGE_LABEL,
+    VECTOR_SEED_LABEL, VECTORS_VERSION, W,
+};
 use crate::entry::Entry;
-use crate::hash::{Hash, hex0x, keccak};
-use crate::scheme::{self, Reject};
-use crate::tree::{SLOT_BITS, Tree};
-use crate::wots;
+use crate::error::Error;
+use crate::hash::{Hash, keccak};
+use crate::tree::Tree;
+use crate::{keys, scheme};
 
-pub const VERSION: u32 = 2;
-pub const GENERATION: u32 = 0;
-
-pub fn master_seed() -> Hash {
-    keccak(&[b"nonce-bound-pq-wallet/test-vectors"])
-}
-
-/// Leaves 0, alternating bits and 2^h - 1 take both sides at every subtree level,
-/// and the second chain's slot 1 takes the right side in the slot layer.
-pub fn generate(height: u8, chains: &[u64]) -> Value {
-    assert!(
-        height >= 2,
-        "height {height} cannot give distinct first, middle and last leaves"
-    );
-    assert!(
-        chains.len() >= 2,
-        "list at least two chains so slot 1 is covered"
-    );
-
-    let master = master_seed();
-    let tree = Tree::build(&master, GENERATION, height, chains);
-    let tree_seed = derive::tree_seed(&master, GENERATION);
-    let root = tree.root();
-    let (c0, c1) = (chains[0], chains[1]);
-    let last = (1u32 << height) - 1;
-    let middle = 0xaaaa_aaaa & last;
+pub fn generate(height: u8, chains: &[u64]) -> Result<Value, Error> {
+    if height < 2 {
+        return Err(Error::BadHeight);
+    }
+    if chains.len() < 2 {
+        return Err(Error::BadChain);
+    }
+    let master = keccak(&[VECTOR_SEED_LABEL]);
+    let tree = Tree::build(&master, 0, height, chains)?;
+    let (tree_seed, root) = (tree.tree_seed(), tree.root());
+    let (c0, c1, last) = (chains[0], chains[1], (1 << height) - 1);
     let other_chain = (1..).find(|c| !chains.contains(c)).unwrap();
 
-    let sign = |chain_id: u64, leaf: u32, msg: &Hash| {
-        scheme::sign_with(&tree, &master, GENERATION, chain_id, leaf, msg)
-            .expect("listed chain and leaf in range")
-            .encode()
-    };
     let message = |chain_id: u64, leaf: u32| {
-        let tag = b"nonce-bound-pq-wallet/vector-message";
-        keccak(&[tag, &chain_id.to_be_bytes(), &leaf.to_be_bytes()])
+        keccak(&[
+            VECTOR_MESSAGE_LABEL,
+            &chain_id.to_be_bytes(),
+            &leaf.to_be_bytes(),
+        ])
     };
-    let flip = |bytes: &[u8], at: usize| {
-        let mut out = bytes.to_vec();
-        out[at] ^= 1;
-        out
+    let sign = |chain_id: u64, leaf: u32, msg: &Hash| {
+        scheme::sign(&tree, chain_id, leaf, msg).map(|e| e.encode())
     };
-    let set = |bytes: &[u8], at: usize, value: u8| {
+    let edit = |bytes: &[u8], at: usize, value: u8| {
         let mut out = bytes.to_vec();
         out[at] = value;
         out
     };
-    let path_word = |level: usize| 2 + wots::SIG_BYTES + 32 * level;
+    let flip = |bytes: &[u8], at: usize| edit(bytes, at, bytes[at] ^ 1);
 
-    // Every case is checked against our own verify before it is written, so the
-    // file can never claim an outcome the Rust verifier disagrees with.
     let mut cases = Vec::new();
     let mut push = |name: String,
                     chain_id: u64,
                     slot: u8,
                     leaf: u32,
                     msg: &Hash,
-                    bytes: &[u8],
-                    want: Result<(), Reject>| {
-        let got = scheme::verify(&tree_seed, &root, height, chain_id, leaf, msg, bytes);
+                    entry: &[u8],
+                    want: Result<(), Error>| {
+        let got = scheme::verify(&tree_seed, &root, height, chain_id, leaf, msg, entry);
         assert_eq!(got, want, "{name}");
-
         let mut case = json!({
             "name": name,
             "chainId": chain_id,
             "slot": slot,
             "leaf": leaf,
             "message": hex0x(msg),
-            "entry": hex0x(bytes),
+            "entry": hex0x(entry),
             "expected": want.is_ok(),
         });
         match want {
             Ok(()) => {
-                let index = derive::leaf_index(slot, leaf, height);
-                let key = derive::leaf(&master, GENERATION, index, chain_id);
-                let entry = Entry::decode(bytes, height).unwrap();
+                let key = keys::leaf(&master, 0, keys::index(slot, leaf, height), chain_id);
+                let decoded = Entry::decode(entry, height).unwrap();
                 case["publicSeed"] = hex0x(&key.public_seed).into();
                 case["publicKeyHash"] = hex0x(&key.public_key_hash).into();
-                case["signature"] = hex0x(entry.signature.as_flattened()).into();
-                case["authPath"] = entry.auth_path.iter().map(|w| hex0x(w)).collect();
+                case["signature"] = hex0x(decoded.signature.as_flattened()).into();
+                case["authPath"] = words_json(&decoded.auth_path);
             }
-            Err(reject) => case["reason"] = reject.reason().into(),
+            Err(e) => case["reason"] = e.as_str().into(),
         }
         cases.push(case);
     };
 
-    use Reject::*;
-    let path_levels = [0, height as usize / 2, (height + SLOT_BITS) as usize - 1];
-    for (leaf, level) in [0, middle, last].into_iter().zip(path_levels) {
+    use Error::*;
+    let path_levels = [0, height / 2, height + SLOT_BITS - 1];
+    for (leaf, level) in [0, 0xaaaa_aaaa & last, last].into_iter().zip(path_levels) {
         let msg = message(c0, leaf);
-        let good = sign(c0, leaf, &msg);
+        let good = sign(c0, leaf, &msg)?;
         let name = |what: &str| format!("leaf{leaf}-{what}");
+        let path_byte = ENTRY_HEADER + SIG_BYTES + 32 * usize::from(level);
         push(name("valid"), c0, 0, leaf, &msg, &good, Ok(()));
         push(
             name("flipped-byte"),
@@ -110,7 +88,7 @@ pub fn generate(height: u8, chains: &[u64]) -> Value {
             0,
             leaf,
             &msg,
-            &flip(&good, 2 + 100),
+            &flip(&good, ENTRY_HEADER + 100),
             Err(RootMismatch),
         );
         push(
@@ -128,24 +106,23 @@ pub fn generate(height: u8, chains: &[u64]) -> Value {
             0,
             leaf,
             &msg,
-            &set(&good, 0, 0x02),
+            &edit(&good, 0, 2),
             Err(BadVersion),
         );
-        let bad_path = flip(&good, path_word(level));
         push(
             name("wrong-path-element"),
             c0,
             0,
             leaf,
             &msg,
-            &bad_path,
+            &flip(&good, path_byte),
             Err(RootMismatch),
         );
     }
 
     let leaf = 5 & last;
     let msg = message(c1, leaf);
-    let good = sign(c1, leaf, &msg);
+    let good = sign(c1, leaf, &msg)?;
     push(
         format!("slot1-leaf{leaf}-valid"),
         c1,
@@ -155,20 +132,19 @@ pub fn generate(height: u8, chains: &[u64]) -> Value {
         &good,
         Ok(()),
     );
-    let slot_zero = set(&good, 1, 0);
     push(
         format!("slot1-leaf{leaf}-slot-byte-0"),
         c1,
         1,
         leaf,
         &msg,
-        &slot_zero,
+        &edit(&good, 1, 0),
         Err(RootMismatch),
     );
 
     let msg = message(c0, 0);
-    let good = sign(c0, 0, &msg);
-    let another = keccak(&[b"nonce-bound-pq-wallet/another-message"]);
+    let good = sign(c0, 0, &msg)?;
+    let other_msg = keccak(&[VECTOR_OTHER_MESSAGE_LABEL]);
     let truncated = &good[..good.len() - 1];
     push(
         "leaf0-wrong-chain".into(),
@@ -184,7 +160,7 @@ pub fn generate(height: u8, chains: &[u64]) -> Value {
         c0,
         0,
         0,
-        &another,
+        &other_msg,
         &good,
         Err(RootMismatch),
     );
@@ -194,7 +170,7 @@ pub fn generate(height: u8, chains: &[u64]) -> Value {
         0,
         0,
         &msg,
-        &set(&good, 1, 16),
+        &edit(&good, 1, 16),
         Err(BadSlot),
     );
     push(
@@ -216,22 +192,22 @@ pub fn generate(height: u8, chains: &[u64]) -> Value {
         Err(LeafOutOfRange),
     );
 
-    json!({
-        "version": VERSION,
+    Ok(json!({
+        "version": VECTORS_VERSION,
         "note": "masterSeed is a public throwaway for tests: never fund an account built from it",
         "params": {
             "hash": "keccak256",
             "n": 32,
-            "w": wots::W,
-            "hashChains": wots::LEN,
+            "w": W,
+            "hashChains": LEN,
             "height": height,
             "slotBits": SLOT_BITS,
-            "generation": GENERATION,
+            "generation": 0,
             "chainIds": chains,
         },
         "masterSeed": hex0x(&master),
         "treeSeed": hex0x(&tree_seed),
         "root": hex0x(&root),
         "cases": cases,
-    })
+    }))
 }

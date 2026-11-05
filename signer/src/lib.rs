@@ -1,6 +1,10 @@
-pub mod derive;
+pub mod codec;
+pub mod consts;
 pub mod entry;
+pub mod error;
 pub mod hash;
+pub mod keys;
+pub mod merkle;
 pub mod scheme;
 pub mod ticket;
 pub mod tree;
