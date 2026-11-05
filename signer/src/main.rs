@@ -11,8 +11,9 @@ use std::process::ExitCode;
 use clap::error::ErrorKind;
 use clap::{Args, Parser, Subcommand};
 use serde_json::{Value, json};
-use signer::hash::Hash;
+use signer::hash::{Hash, hex0x, parse_hash, parse_hex};
 use signer::scheme::{self, Reject, SignError};
+use signer::ticket::{self, Ticket, TicketError};
 use signer::tree::{SLOTS, Tree};
 use signer::{derive, entry, vectors};
 
@@ -40,15 +41,10 @@ enum Command {
         #[command(flatten)]
         at: LeafArgs,
     },
-    /// Sign a 32-byte message with one leaf.
-    Sign {
-        #[command(flatten)]
-        tree: TreeArgs,
-        #[command(flatten)]
-        at: LeafArgs,
-        #[arg(long)]
-        msg: String,
-    },
+    /// Sign a 32-byte message with one leaf, from the seed or from a ticket file.
+    Sign(SignArgs),
+    /// Cut hot-band leaves into a ticket file for a device that never holds the seed.
+    ExportLeaves(ExportArgs),
     /// Check an entry the way the account's verify frame does.
     Verify(VerifyArgs),
     /// Write the shared test vector file, from a fixed public throwaway seed.
@@ -78,6 +74,48 @@ struct LeafArgs {
     /// The per-chain leaf index, which the nonce key carries.
     #[arg(long)]
     leaf: u32,
+}
+
+#[derive(Args)]
+struct SignArgs {
+    /// Sign from a ticket file instead of the master seed.
+    #[arg(long, conflicts_with_all = ["seed_file", "height", "generation", "chains"])]
+    ticket_file: Option<PathBuf>,
+    /// File holding the 32-byte master seed as hex. Overrides PQ_SEED.
+    #[arg(long)]
+    seed_file: Option<PathBuf>,
+    #[arg(long, required_unless_present = "ticket_file")]
+    height: Option<u32>,
+    #[arg(long)]
+    generation: Option<u32>,
+    #[arg(long, value_delimiter = ',', required_unless_present = "ticket_file")]
+    chains: Vec<u64>,
+    /// Required with the seed. With a ticket it is optional and must match the ticket.
+    #[arg(long, required_unless_present = "ticket_file")]
+    chain_id: Option<u64>,
+    #[arg(long)]
+    leaf: u32,
+    #[arg(long)]
+    msg: String,
+}
+
+#[derive(Args)]
+struct ExportArgs {
+    #[command(flatten)]
+    tree: TreeArgs,
+    #[arg(long)]
+    chain_id: u64,
+    /// First leaf to export, inclusive.
+    #[arg(long)]
+    from: u32,
+    /// Last leaf to export, inclusive.
+    #[arg(long)]
+    to: u32,
+    /// The account's hotStart. Leaves below it get no caps, so they are never exported.
+    #[arg(long)]
+    hot_start: u32,
+    #[arg(long)]
+    out: PathBuf,
 }
 
 #[derive(Args)]
@@ -137,7 +175,8 @@ fn main() -> ExitCode {
     report(match cli.command {
         Command::Keygen(tree) => keygen(&tree),
         Command::Pubkey { tree, at } => pubkey(&tree, &at),
-        Command::Sign { tree, at, msg } => sign(&tree, &at, &msg),
+        Command::Sign(args) => sign(&args),
+        Command::ExportLeaves(args) => export_leaves(&args),
         Command::Verify(args) => verify(&args),
         Command::Vectors(args) => write_vectors(&args),
     })
@@ -192,37 +231,149 @@ fn pubkey(args: &TreeArgs, at: &LeafArgs) -> Result<Value, Fail> {
     }))
 }
 
-fn sign(args: &TreeArgs, at: &LeafArgs, msg: &str) -> Result<Value, Fail> {
-    let height = check_height(args.height)?;
-    slot_of(&args.chains, at.chain_id)?;
-    check_leaf(at.leaf, height)?;
-    let msg = parse_msg(msg)?;
-    let master = master_seed(args.seed_file.as_deref())?;
-
-    let entry = scheme::sign(
-        &master,
-        args.generation,
-        height,
-        &args.chains,
-        at.chain_id,
-        at.leaf,
-        &msg,
-    )
-    .map_err(|e| match e {
-        SignError::BadChain => fail(
-            "bad_chain",
-            format!("chain {} is not in --chains", at.chain_id),
-        ),
-        SignError::LeafOutOfRange => fail("leaf_out_of_range", format!("leaf {}", at.leaf)),
-    })?;
-
+fn sign(args: &SignArgs) -> Result<Value, Fail> {
+    let msg = parse_msg(&args.msg)?;
+    let entry = match &args.ticket_file {
+        Some(path) => sign_from_ticket(path, args.chain_id, args.leaf, &msg)?,
+        None => sign_from_seed(args, &msg)?,
+    };
     Ok(json!({
         "slot": entry.slot,
-        "leaf": at.leaf,
+        "leaf": args.leaf,
         "signature": hex0x(entry.signature.as_flattened()),
         "authPath": entry.auth_path.iter().map(|w| hex0x(w)).collect::<Vec<_>>(),
         "entry": hex0x(&entry.encode()),
     }))
+}
+
+fn sign_from_seed(args: &SignArgs, msg: &Hash) -> Result<entry::Entry, Fail> {
+    let height = check_height(
+        args.height
+            .expect("clap requires --height without a ticket"),
+    )?;
+    let chain_id = args
+        .chain_id
+        .expect("clap requires --chain-id without a ticket");
+    slot_of(&args.chains, chain_id)?;
+    check_leaf(args.leaf, height)?;
+    let master = master_seed(args.seed_file.as_deref())?;
+
+    let generation = args.generation.unwrap_or(0);
+    scheme::sign(
+        &master,
+        generation,
+        height,
+        &args.chains,
+        chain_id,
+        args.leaf,
+        msg,
+    )
+    .map_err(|e| match e {
+        SignError::BadChain => fail("bad_chain", format!("chain {chain_id} is not in --chains")),
+        SignError::LeafOutOfRange => fail("leaf_out_of_range", format!("leaf {}", args.leaf)),
+    })
+}
+
+fn sign_from_ticket(
+    path: &Path,
+    chain_id: Option<u64>,
+    leaf: u32,
+    msg: &Hash,
+) -> Result<entry::Entry, Fail> {
+    let ticket = read_ticket(path)?;
+    if let Some(id) = chain_id.filter(|&id| id != ticket.chain_id) {
+        return Err(fail(
+            "bad_chain",
+            format!("the ticket is for chain {}, not {id}", ticket.chain_id),
+        ));
+    }
+    ticket.sign(leaf, msg).map_err(|e| match e {
+        TicketError::LeafNotInTicket => fail(
+            "leaf_not_in_ticket",
+            format!("leaf {leaf} is not in {}", path.display()),
+        ),
+        TicketError::Corrupt => fail(
+            "bad_ticket",
+            format!("leaf {leaf} does not hash up to the ticket's root"),
+        ),
+    })
+}
+
+fn read_ticket(path: &Path) -> Result<Ticket, Fail> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| fail("bad_ticket", format!("cannot read {}: {e}", path.display())))?;
+    let json: Value = serde_json::from_str(&text)
+        .map_err(|e| fail("bad_ticket", format!("{} is not JSON: {e}", path.display())))?;
+    Ticket::from_json(&json).ok_or_else(|| {
+        fail(
+            "bad_ticket",
+            format!("{} is not a version-1 ticket", path.display()),
+        )
+    })
+}
+
+fn export_leaves(args: &ExportArgs) -> Result<Value, Fail> {
+    let height = check_height(args.tree.height)?;
+    let slot = slot_of(&args.tree.chains, args.chain_id)?;
+    if args.from < args.hot_start {
+        return Err(fail(
+            "leaf_out_of_range",
+            format!(
+                "leaf {} is below --hot-start {}: a cold leaf on a hot device has no caps",
+                args.from, args.hot_start
+            ),
+        ));
+    }
+    if args.from > args.to {
+        return Err(fail(
+            "leaf_out_of_range",
+            format!("--from {} is after --to {}", args.from, args.to),
+        ));
+    }
+    check_leaf(args.to, height)?;
+    let master = master_seed(args.tree.seed_file.as_deref())?;
+
+    let tree = Tree::build(&master, args.tree.generation, height, &args.tree.chains);
+    let ticket = ticket::export(
+        &tree,
+        &master,
+        args.tree.generation,
+        args.chain_id,
+        args.from,
+        args.to,
+    )
+    .map_err(|_| fail("leaf_out_of_range", "range outside the tree"))?;
+    let text = serde_json::to_string_pretty(&ticket.to_json()).unwrap() + "\n";
+    write_secret_file(&args.out, &text).map_err(|e| {
+        fail(
+            "bad_args",
+            format!("cannot write {}: {e}", args.out.display()),
+        )
+    })?;
+
+    Ok(json!({
+        "out": args.out.display().to_string(),
+        "chainId": args.chain_id,
+        "slot": slot,
+        "from": args.from,
+        "to": args.to,
+        "count": args.to - args.from + 1,
+    }))
+}
+
+/// Owner read and write only: the file holds one-time secrets.
+fn write_secret_file(path: &Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut file = std::fs::File::create(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+    file.write_all(contents.as_bytes())
 }
 
 fn verify(args: &VerifyArgs) -> Result<Value, Fail> {
@@ -349,22 +500,4 @@ fn check_leaf(leaf: u32, height: u8) -> Result<(), Fail> {
 
 fn parse_msg(s: &str) -> Result<Hash, Fail> {
     parse_hash(s).ok_or_else(|| fail("bad_msg_length", "--msg must be 32 bytes of hex"))
-}
-
-/// Accepts either case, with or without 0x.
-fn parse_hex(s: &str) -> Option<Vec<u8>> {
-    let digits = s
-        .strip_prefix("0x")
-        .or_else(|| s.strip_prefix("0X"))
-        .unwrap_or(s);
-    hex::decode(digits).ok()
-}
-
-fn parse_hash(s: &str) -> Option<Hash> {
-    parse_hex(s)?.try_into().ok()
-}
-
-/// Always 0x-prefixed lowercase.
-fn hex0x(bytes: &[u8]) -> String {
-    format!("0x{}", hex::encode(bytes))
 }

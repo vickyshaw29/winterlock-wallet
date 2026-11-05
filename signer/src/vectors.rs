@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use crate::derive;
 use crate::entry::Entry;
-use crate::hash::{Hash, keccak};
+use crate::hash::{Hash, hex0x, keccak};
 use crate::scheme::{self, Reject};
 use crate::tree::{SLOT_BITS, Tree};
 use crate::wots;
@@ -16,10 +16,6 @@ pub const GENERATION: u32 = 0;
 
 pub fn master_seed() -> Hash {
     keccak(&[b"nonce-bound-pq-wallet/test-vectors"])
-}
-
-fn hex0x(bytes: &[u8]) -> String {
-    format!("0x{}", hex::encode(bytes))
 }
 
 /// Leaves 0, alternating bits and 2^h - 1 take both sides at every subtree level,

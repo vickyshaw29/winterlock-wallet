@@ -285,3 +285,158 @@ fn vectors_writes_a_file() {
     );
     assert_eq!(one_chain.0, "bad_chain");
 }
+
+fn temp_path(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("signer-{name}-{}.json", std::process::id()))
+}
+
+/// Exports leaves 4–7 of chain 1337 (hot start 4) and returns the ticket path.
+fn export_ticket(name: &str) -> std::path::PathBuf {
+    let path = temp_path(name);
+    let out = path.to_str().unwrap();
+    let printed = ok(
+        &refs(&with(
+            "export-leaves",
+            &[
+                "--chain-id",
+                "1337",
+                "--from",
+                "4",
+                "--to",
+                "7",
+                "--hot-start",
+                "4",
+                "--out",
+                out,
+            ],
+        )),
+        Some(SEED),
+    );
+    assert_eq!(printed["count"], 4);
+    assert_eq!(printed["slot"], 0);
+    path
+}
+
+#[test]
+fn ticket_signs_the_same_bytes_as_the_seed() {
+    let path = export_ticket("ticket-same");
+    let ticket = path.to_str().unwrap();
+
+    let from_ticket = ok(
+        &[
+            "sign",
+            "--ticket-file",
+            ticket,
+            "--leaf",
+            "6",
+            "--msg",
+            MSG,
+            "--chain-id",
+            "1337",
+        ],
+        None,
+    );
+    let from_seed = ok(
+        &refs(&with(
+            "sign",
+            &["--chain-id", "1337", "--leaf", "6", "--msg", MSG],
+        )),
+        Some(SEED),
+    );
+    assert_eq!(from_ticket, from_seed);
+
+    let keygen = ok(&refs(&with("keygen", &[])), Some(SEED));
+    let verified = ok(
+        &[
+            "verify",
+            "--tree-seed",
+            keygen["treeSeed"].as_str().unwrap(),
+            "--root",
+            keygen["root"].as_str().unwrap(),
+            "--height",
+            "3",
+            "--chain-id",
+            "1337",
+            "--leaf",
+            "6",
+            "--msg",
+            MSG,
+            "--entry",
+            from_ticket["entry"].as_str().unwrap(),
+        ],
+        None,
+    );
+    assert_eq!(verified, json!({ "ok": true }));
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn ticket_refusals() {
+    let path = export_ticket("ticket-refusals");
+    let ticket = path.to_str().unwrap();
+    let sign_ticket = |leaf: &str, extra: &[&str]| {
+        let mut args = vec![
+            "sign",
+            "--ticket-file",
+            ticket,
+            "--leaf",
+            leaf,
+            "--msg",
+            MSG,
+        ];
+        args.extend(extra);
+        err(&args, None).0
+    };
+
+    assert_eq!(sign_ticket("3", &[]), "leaf_not_in_ticket");
+    assert_eq!(sign_ticket("8", &[]), "leaf_not_in_ticket");
+    assert_eq!(sign_ticket("5", &["--chain-id", "11155111"]), "bad_chain");
+    assert_eq!(sign_ticket("5", &["--seed-file", ticket]), "bad_args");
+
+    // One changed secret no longer hashes up to the root.
+    let mut json: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    json["leaves"][1]["secrets"][0] = json!(MSG);
+    std::fs::write(&path, json.to_string()).unwrap();
+    assert_eq!(sign_ticket("5", &[]), "bad_ticket");
+
+    std::fs::write(&path, "not json").unwrap();
+    assert_eq!(sign_ticket("5", &[]), "bad_ticket");
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn export_refuses_cold_leaves() {
+    let out = temp_path("ticket-cold");
+    let refused = err(
+        &refs(&with(
+            "export-leaves",
+            &[
+                "--chain-id",
+                "1337",
+                "--from",
+                "2",
+                "--to",
+                "7",
+                "--hot-start",
+                "4",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+        )),
+        Some(SEED),
+    );
+    assert_eq!(refused.0, "leaf_out_of_range");
+    assert!(refused.1.contains("no caps"), "{}", refused.1);
+    assert!(!out.exists(), "nothing written");
+}
+
+#[test]
+fn ticket_file_holds_no_seed_and_is_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let path = export_ticket("ticket-private");
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains(&SEED[2..]), "the seed is in the ticket");
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600);
+    std::fs::remove_file(&path).unwrap();
+}
