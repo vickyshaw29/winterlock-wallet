@@ -1,0 +1,65 @@
+name: Frame-tx e2e (real devnet)
+
+# Tier 2: the real two-node gossip round-trip test (test/e2e/frameTx.e2e.test.ts)
+# against a real EIP-8141-aware ethrex devnet. Only runs post-merge to the
+# main branch, not on PRs - it's an order of magnitude slower than tier 1
+# (frame-tx-tests.yml) and catches a different class of bug (wire-format/
+# protocol mismatches a mocked unit test structurally cannot see - this is
+# exactly how the original wrong RLP envelope was found).
+#
+# The test itself (frameTx.e2e.test.ts's beforeAll/afterAll) starts and
+# tears down the devnet via test/e2e/ethrex-devnet.sh - this workflow's only
+# job is to point that script at a prebuilt image instead of its default
+# local-build flow, via ETHREX_PREBUILT_IMAGE. That image (ethrex binary +
+# the Hegota genesis/dev keys fixtures baked in) is published by the ethrex
+# fork's own CI - see .github/workflows/publish-eip8141-image.yml in
+# github.com/forshtat/ethrex. Nothing is built from source here.
+
+on:
+  push:
+    branches:
+      - "8141"
+  workflow_dispatch: {}
+
+env:
+  ETHREX_PREBUILT_IMAGE: ghcr.io/forshtat/eip8141-devnet:latest
+  ETHREX_PORT: 8555
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.23
+
+      - name: Install dependencies and build
+        run: |
+          bun install
+          bun run build
+
+      # Only needed if ghcr.io/forshtat/eip8141-devnet is kept private.
+      # Simplest fix: mark that package (and ghcr.io/forshtat/ethrex) public
+      # in GHCR once, and delete this step - GITHUB_TOKEN's cross-repo
+      # package read access (forshtat/mempool-workshop-sidecar workflow pulling a package
+      # published by forshtat/ethrex) is not guaranteed for private packages.
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run the e2e gossip round-trip test
+        # frameTx.e2e.test.ts's own beforeAll/afterAll start and tear down
+        # the devnet via ethrex-devnet.sh, reading ETHREX_PREBUILT_IMAGE
+        # from the environment above.
+        run: bun run test:e2e
+
+      - name: Show devnet logs on failure
+        if: failure()
+        run: docker logs --tail 200 skandha-e2e-ethrex 2>&1 || true

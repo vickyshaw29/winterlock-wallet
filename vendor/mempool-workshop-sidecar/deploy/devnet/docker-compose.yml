@@ -1,0 +1,186 @@
+name: eip8141-devnet
+
+# Persistent, single-validator Hegota devnet: ethrex (EL) + Lighthouse (CL +
+# validator client), staging Osaka -> Amsterdam -> Hegota over epochs just
+# like the CI-proven Kurtosis config this was derived from
+# (test/e2e/kurtosis/eip8141-single-node.yaml). See README.md for why this
+# exists as its own Compose stack instead of reusing Kurtosis directly.
+#
+# Usage:
+#   docker compose up genesis validator-keys   # one-shot: writes ./data
+#   docker compose up -d ethrex lighthouse-beacon lighthouse-validator
+
+services:
+  # One-shot: writes genesis.json (EL), genesis.ssz + config.yaml (CL), and
+  # a shared JWT secret into ./data/genesis.
+  genesis:
+    image: ethpandaops/ethereum-genesis-generator:6.1.6
+    # GENESIS_TIMESTAMP defaults to 0 (Unix epoch) - genesis.values.env only
+    # sets GENESIS_DELAY, a relative offset from GENESIS_TIMESTAMP, not from
+    # "now". Export GENESIS_TIMESTAMP=$(date +%s) in the shell before `up`,
+    # or genesis lands in 1970.
+    environment:
+      - GENESIS_TIMESTAMP
+    volumes:
+      - ./data/genesis:/data
+      - ./genesis.values.env:/config/values.env:ro
+    command: ["all"]
+
+  # One-shot: derives real EIP-2335 keystores for the genesis validators
+  # from the generator's default mnemonic. --insecure uses weak KDF params
+  # on purpose - this is a throwaway devnet key, not real stake.
+  validator-keys:
+    image: protolambda/eth2-val-tools:latest
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+    volumes:
+      - ./data/validator-keys:/data
+    command:
+      - keystores
+      - --insecure
+      - --source-mnemonic
+      - "sleep moment list remain like wall lake industry canvas wonder ecology elite duck salad naive syrup frame brass utility club odor country obey pudding"
+      - --source-min=0
+      - --source-max=32
+      # eth2-val-tools refuses to write into a path that already exists at
+      # all - a bind-mount target is always pre-created as an empty
+      # directory, so this has to be a fresh subdirectory of it, not /data
+      # itself.
+      - --out-loc=/data/keystores
+
+  ethrex:
+    image: ghcr.io/forshtat/ethrex:eip8141-tracer-latest
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/ethrex:/data
+    ports:
+      - "30303:30303/tcp"
+      - "30303:30303/udp"
+      # Deliberately open - the miner's own privileged submission port,
+      # exposed anyway per this devnet's demonstration-only scope (see
+      # README.md).
+      - "8545:8545/tcp"
+    command:
+      - "--network=/genesis/metadata/genesis.json"
+      - "--datadir=/data"
+      - "--http.addr=0.0.0.0"
+      - "--http.port=8545"
+      - "--http.api=eth,net,web3,ethrex,debug,admin,txpool"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=8551"
+      - "--authrpc.jwtsecret=/genesis/jwt/jwtsecret"
+      - "--log.level=info"
+      # Default (snap) needs peer-verified state to ever consider itself
+      # synced - irrelevant and harmful for an isolated single-node chain
+      # with zero peers, which otherwise reports PayloadStatus::Syncing to
+      # every forkchoiceUpdated call forever.
+      - "--syncmode=full"
+      - "--p2p.addr=0.0.0.0"
+      - "--p2p.port=30303"
+      - "--discovery.port=30303"
+
+  lighthouse-beacon:
+    image: ethpandaops/lighthouse:focil
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+      ethrex:
+        condition: service_started
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/lighthouse-beacon:/data
+    entrypoint: ["lighthouse"]
+    command:
+      - bn
+      - --testnet-dir=/genesis/metadata
+      - --datadir=/data
+      - --execution-endpoint=http://ethrex:8551
+      - --execution-jwt=/genesis/jwt/jwtsecret
+      - --debug-level=info
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --listen-address=0.0.0.0
+      - --port=9000
+      - --supernode
+      - --allow-insecure-genesis-sync
+      - --ignore-ws-check
+      # No --boot-nodes here - this is the first node up, nothing to dial
+      # yet. lighthouse-beacon-2 (below) dials it, not the other way around.
+      # See README.md's peering note for the deploy sequence.
+      # Without this, the ENR this node advertises has ip4: None (confirmed
+      # live - auto-detection doesn't populate it inside a container), so
+      # lighthouse-beacon-2 has no address to dial even with the right ENR.
+      - --enr-address=${LIGHTHOUSE_BEACON_1_IP:?set this to lighthouse-beacon's container IP - see README.md}
+
+  # A second, passive beacon node with no validators of its own - peered with
+  # lighthouse-beacon purely so each has at least one connected peer.
+  # Lighthouse's sync-state machine (network/src/sync/manager.rs,
+  # update_sync_state) can never leave SyncState::Stalled with zero peers,
+  # by design - Stalled's own doc comment says "more peers need to be
+  # connected before we can proceed" - and Stalled blocks forkchoiceUpdated-
+  # with-attributes calls, so a genuinely solo node can never build its own
+  # first block. Two nodes both stuck at head_slot=0 correctly classify each
+  # other as FullySynced (peer_sync_info.rs's remote_sync_type compares a
+  # peer's head against OUR OWN head, not wall-clock time), which is enough
+  # to satisfy the gate. See README.md for why this lives on the same host
+  # rather than needing a second machine.
+  lighthouse-beacon-2:
+    image: ethpandaops/lighthouse:focil
+    depends_on:
+      lighthouse-beacon:
+        condition: service_started
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/lighthouse-beacon-2:/data
+    entrypoint: ["lighthouse"]
+    command:
+      - bn
+      - --testnet-dir=/genesis/metadata
+      - --datadir=/data
+      - --execution-endpoint=http://ethrex:8551
+      - --execution-jwt=/genesis/jwt/jwtsecret
+      - --debug-level=info
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --listen-address=0.0.0.0
+      - --port=9000
+      - --supernode
+      - --allow-insecure-genesis-sync
+      - --ignore-ws-check
+      - --boot-nodes=${LIGHTHOUSE_BEACON_1_ENR:?set this to lighthouse-beacon's ENR - see README.md}
+
+  # No separate "import" step: lighthouse vc auto-discovers keystores placed
+  # under <datadir>/validators, so eth2-val-tools' raw output
+  # (keys/<pubkey>/voting-keystore.json, secrets/<pubkey>) is mounted
+  # directly there - `account validator import` is an interactive wizard
+  # for one-off manual imports and isn't the right tool here.
+  # --datadir and --validators-dir are mutually exclusive (the CLI's own
+  # usage error says so), so this relies on --datadir's implied
+  # <datadir>/validators location instead of passing --validators-dir.
+  lighthouse-validator:
+    image: ethpandaops/lighthouse:focil
+    depends_on:
+      validator-keys:
+        condition: service_completed_successfully
+      lighthouse-beacon:
+        condition: service_started
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/lighthouse-validator:/data
+      - ./data/validator-keys/keystores/keys:/data/validators
+      - ./data/validator-keys/keystores/secrets:/data/secrets:ro
+    entrypoint: ["lighthouse"]
+    command:
+      - vc
+      - --testnet-dir=/genesis/metadata
+      - --datadir=/data
+      - --secrets-dir=/data/secrets
+      - --beacon-nodes=http://lighthouse-beacon:5052
+      - --init-slashing-protection
+      - --suggested-fee-recipient=0x5544596212F91984C986A919C8026DF0576816f9

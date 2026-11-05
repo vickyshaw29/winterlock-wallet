@@ -1,0 +1,43 @@
+{
+  "name": "alt-mempool-workshop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Quick-start repo for the EIP-8141 / ERC-8421 alt-mempool workshop",
+  "scripts": {
+    "step_1_check": "tsx src/steps/step_1_check.ts",
+    "step_2_tx_first": "tsx src/steps/step_2_tx_first.ts",
+    "step_3_tx_paymaster": "tsx src/steps/step_3_tx_paymaster.ts",
+    "step_4_wallet_deploy": "tsx src/steps/step_4_wallet_deploy.ts",
+    "step_5_tx_wallet": "tsx src/steps/step_5_tx_wallet.ts",
+    "step_6_tx_violating_canonical": "tsx src/steps/step_6_tx_violating_canonical.ts",
+    "step_7_stake": "tsx src/steps/step_7_stake.ts",
+    "step_8_tx_violating_alt": "tsx src/steps/step_8_tx_violating_alt.ts",
+    "step_9_reputation_burn": "tsx src/steps/step_9_reputation_burn.ts",
+    "step_10_tx_violating_alt_banned": "tsx src/steps/step_10_tx_violating_alt_banned.ts",
+    "step_11_debug": "tsx src/steps/step_11_debug.ts",
+    "step_12_tx_keyed_nonces": "tsx src/steps/step_12_tx_keyed_nonces.ts",
+    "step_13_tx_recent_roots": "tsx src/steps/step_13_tx_recent_roots.ts",
+    "reset_reputation": "tsx src/commands/reset_reputation.ts",
+    "build:contracts": "forge build --root contracts && node scripts/export-artifacts.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:contracts": "forge test --root contracts",
+    "compile:fork": "node scripts/compile-with-fork.mjs"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^7.0.0",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@forshtat/hegota-support": "0.0.1",
+    "json5": "^2.2.3",
+    "viem": "^2.57.7"
+  }
+}

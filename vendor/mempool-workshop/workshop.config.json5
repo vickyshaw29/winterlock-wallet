@@ -1,0 +1,53 @@
+// The only place configuration lives. Every key is required; an unknown or missing key stops the
+// step with CONFIG_INVALID. The code reads this file and never writes it. What the steps generate
+// (your key, deployed addresses, the last tx hash) goes to the state file named below.
+{
+  // --- The devnet ---
+  chainId: 1337,
+  // The gateway sidecar node (/rpc). Everything goes through it: frame transactions into the
+  // standard alt-mempool, raw transactions on to the canonical mempool, the faucet, the explorer
+  // methods, and the standard eth_* reads. The gateway validates, then gossips to the miner.
+  gatewayUrl: "https://altmempoolgateway.forshtat.com/rpc",
+  // The web explorer, only used to print links.
+  explorerUrl: "https://explorer.altmempool.wtf/",
+  // NaiveStakingRegistry: every stake is keyed on msg.sender.
+  stakingRegistry: "0xd51c04d7a0b01124e84de152f4e56d9eecb22d2f",
+  // Sentinel entry point that the sidecar uses as the mempool's entry-point address.
+  entryPoint: "0x00000000000000000000000000000000000000aa",
+
+  // --- Files (relative to this file) ---
+  // Written by the steps: the generated participant key, deployed contracts, the last tx hash.
+  // Delete it to start the workshop over; it is git-ignored because it holds your private key.
+  stateFile: ".workshop-state.json",
+
+  // --- Transactions ---
+  // Recipient of the demo transfers in steps 2, 3, 5, 6, 8 and 10.
+  recipient: "0x8943545177806ED17B9F23F0a21ee5948eCaa776",
+  // Value of each demo transfer.
+  transferGwei: "1",
+  // maxFeePerGas of every frame transaction.
+  maxFeePerGasGwei: "2",
+  // Legacy transactions (contract deployments and the faucet wait): the devnet base fee is 7 wei,
+  // so this clears it by a wide margin.
+  legacyGasPriceGwei: "0.002",
+  legacyGasLimit: 250000,
+  // Contract creation costs state gas on this devnet; 900k reverted, 6M works.
+  deployGasLimit: 6000000,
+  // How long to wait for a transaction to be mined before TX_NOT_MINED.
+  txTimeoutSec: 120,
+
+  // --- Amounts ---
+  // Step 1 asks the faucet for funds when your balance is below this: enough for every step.
+  minBalanceEth: "0.1",
+  // Sent as the creation value (a plain transfer would run the contract's fallback and fail).
+  paymasterFundingEth: "0.01",
+  walletFundingEth: "0.01",
+  // Covers gas and the stake in step 7.
+  violatingWalletFundingEth: "0.03",
+  // Strictly above the devnet's minStake of 0.01 ETH.
+  stakeEth: "0.012",
+  // One day, the ERC-8421 minimum unstake delay.
+  unstakeDelaySec: 86400,
+  // Step 9: opsSeen written for your wallet; ERC-7562 uses 10000 to declare an entity banned.
+  banOpsSeenPenalty: 10000,
+}

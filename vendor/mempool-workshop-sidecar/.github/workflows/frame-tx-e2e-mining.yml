@@ -1,0 +1,104 @@
+name: Frame-tx e2e (real block production)
+
+# Tier 3: the one e2e scenario that needs a REAL mined block
+# (test/e2e/frameTxInclusion.e2e.test.ts), not just mempool admission or
+# gossip propagation against a devnet that never advances past genesis (what
+# tier 2 / frame-tx-e2e.yml's `--dev`-mode single node does). It drives a
+# real Kurtosis devnet - one ethrex node paired with a real Lighthouse
+# consensus client, staging Osaka -> Amsterdam -> Hegota over epochs exactly
+# like ethrex's own public Hegota devnet - so it can observe
+# `MempoolReconciler` actually detecting inclusion from a genuine receipt,
+# not a mocked one.
+#
+# Manual trigger only, like ethrex's own heaviest Kurtosis scenario
+# (deep_reorg.yaml): this is new, unproven in CI, and an order of magnitude
+# slower again than tier 2 (real fork-activation wall-clock time - staged
+# epochs at 6s/slot - on top of Kurtosis/Docker image pull time). Promote to
+# a `push` trigger once it's been green a few times.
+#
+# test/e2e/frameTxInclusion.e2e.test.ts's own beforeAll/afterAll start and
+# tear down the devnet via test/e2e/ethrex-mining-devnet.sh, which pulls
+# ETHREX_BASE_IMAGE (the same plain ethrex image tier 2's prebuilt devnet
+# image is built FROM - see that image's own publish-eip8141-image.yml
+# comment) and tags it ethrex:local, the name
+# test/e2e/kurtosis/eip8141-single-node.yaml's `el_image` expects.
+
+on:
+  workflow_dispatch: {}
+
+env:
+  ETHREX_BASE_IMAGE: ghcr.io/forshtat/ethrex:eip8141-tracer-latest
+
+jobs:
+  e2e-mining:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.23
+
+      - name: Install dependencies and build
+        run: |
+          bun install
+          bun run build
+
+      # ETHREX_BASE_IMAGE is a plain ethrex image, not the tier-2 devnet
+      # image - only needed if ghcr.io/forshtat/ethrex is kept private, same
+      # caveat as frame-tx-e2e.yml's own login step.
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Raw Kurtosis CLI, not the assertoor-playbook wrapper - this test
+      # needs direct RPC-endpoint control (submit a real transaction, poll
+      # for real inclusion), not a canned scenario. ethrex's own
+      # deep_reorg.yaml installs via apt.fury.io/kurtosis-tech, but that feed
+      # is stale - it tops out at 1.15.2, which predates Kurtosis's `GpuConfig`
+      # Starlark builtin (added in 1.18.0, kurtosis-tech/kurtosis#3018). The
+      # pinned ethereum-package revision's zkboost module references
+      # `GpuConfig` unconditionally at interpretation time (it doesn't need to
+      # be USED - Kurtosis resolves every name reachable from `main.star`
+      # eagerly), so 1.15.2 fails immediately on every run, unrelated to this
+      # devnet's own config. Homebrew (Kurtosis's own primary documented
+      # install path, Linux included) tracks their actual releases instead -
+      # but unlike a macOS runner, ubuntu-latest has no Homebrew preinstalled,
+      # so bootstrap it first via Homebrew's own setup action.
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+
+      - name: Install Kurtosis CLI
+        run: |
+          brew install kurtosis-tech/tap/kurtosis-cli
+          kurtosis version
+
+      - name: Start Kurtosis engine
+        run: kurtosis engine start
+
+      - name: Run the real-inclusion e2e test
+        # frameTxInclusion.e2e.test.ts's own beforeAll/afterAll start and
+        # tear down the enclave via ethrex-mining-devnet.sh.
+        run: bun run test:e2e:mining
+
+      - name: Dump enclave state on failure
+        if: failure()
+        run: kurtosis enclave dump skandha-e2e-mining /tmp/enclave-logs || true
+
+      - name: Upload enclave logs as artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skandha-e2e-mining-enclave-logs
+          path: /tmp/enclave-logs
+          if-no-files-found: ignore
+
+      - name: Tear down enclave
+        if: always()
+        run: kurtosis enclave rm skandha-e2e-mining --force || true
