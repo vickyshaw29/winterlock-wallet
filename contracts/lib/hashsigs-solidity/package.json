@@ -1,0 +1,39 @@
+{
+  "name": "@quip.network/hashsigs-solidity",
+  "version": "0.3.0",
+  "private": false,
+  "description": "A Solidity implementation of WOTS+ and the SHRINCS verifier-oriented signature construction",
+  "license": "AGPL-3.0-or-later",
+  "author": "quip.network",
+  "files": [
+    "contracts",
+    "package.json",
+    "README.md",
+    "COPYING"
+  ],
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "prepare": "forge build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quipnetwork/hashsigs-solidity.git"
+  },
+  "keywords": [
+    "solidity",
+    "ethereum",
+    "smart-contracts",
+    "wots",
+    "wots-plus",
+    "shrincs",
+    "xmss",
+    "sphincs",
+    "verifier",
+    "cryptography",
+    "signatures",
+    "hash",
+    "post-quantum",
+    "quantum"
+  ]
+}

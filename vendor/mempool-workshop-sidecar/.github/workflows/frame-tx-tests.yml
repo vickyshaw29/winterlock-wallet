@@ -1,0 +1,50 @@
+name: Frame-tx unit & integration tests
+
+# Tier 1: fast, no execution client needed at all. Runs on every PR and on
+# push to the main branch. The real e2e devnet test (a whole EIP-8141-aware
+# ethrex node + two live bundler processes) is tier 2 - see frame-tx-e2e.yml
+# - and only runs post-merge, not on PRs, since it's an order of magnitude
+# slower.
+
+on:
+  pull_request:
+    branches:
+      - "8141"
+  push:
+    branches:
+      - "8141"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.23
+
+      - name: Install dependencies and build
+        run: |
+          bun install
+          bun run build
+
+      - name: Test packages/executor
+        working-directory: packages/executor
+        # Its own vitest config, not the root - only this config loads
+        # vitestSetup.ts's GethTracer mock (see CLAUDE.md). Named
+        # directories, not `vitest run` bare: test/unit/ predates this fork
+        # and fails to load (stale EPv7 typechain imports), unrelated to
+        # anything here - tracked as a known, pre-existing gap, not swept
+        # under the rug by a silent --exclude (this vitest version's CLI
+        # has no such flag anyway; verified via `vitest run --help`).
+        run: bunx vitest run test/entities test/modules test/services test/utils
+
+      - name: Test packages/api
+        working-directory: packages/api
+        run: bunx vitest run
+
+      - name: Test packages/node, packages/params, packages/types, packages/db
+        run: bunx vitest run packages/node/test packages/params/test packages/types/test packages/db/test

@@ -1,0 +1,59 @@
+name: Check if package version is updated
+
+on:
+  pull_request:
+    branches:
+      - master
+
+# EndBug/version-check reads package.json at both the PR head and base via
+# the API; the repo's default GITHUB_TOKEN scope (Settings > Actions >
+# General > Workflow permissions) is read-only by default, and this run was
+# hitting "403 Forbidden" without an explicit grant.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.23
+
+      # A hand-rolled diff replaces EndBug/version-check@v2.1.1: that action
+      # reads the PR's commit list from the GitHub API, capped and unpaginated
+      # at 30 commits, oldest-first - it always inspected the SAME first-30
+      # commits of this PR's (100+-commit) history regardless of which push
+      # triggered the run, so it could never see a version bump landed any
+      # later than that. A direct diff against the base ref has no such cap.
+      - name: Check if version has been updated
+        id: check
+        run: |
+          git fetch origin "${{ github.event.pull_request.base.ref }}"
+          base_version="$(git show "origin/${{ github.event.pull_request.base.ref }}:package.json" | jq -r .version)"
+          head_version="$(jq -r .version package.json)"
+          echo "base version: $base_version"
+          echo "head version: $head_version"
+          if [ "$base_version" = "$head_version" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log when changed
+        if: steps.check.outputs.changed == 'true'
+        run: echo "Version change found - $(jq -r .version package.json)"
+
+      - name: Dry run the sidecar build
+        run: bun install && bun run build && bun run bootstrap
+
+      - name: Log when unchanged
+        if: steps.check.outputs.changed == 'false'
+        run: echo "No version change :/ Please update version in package.json!" && exit 1

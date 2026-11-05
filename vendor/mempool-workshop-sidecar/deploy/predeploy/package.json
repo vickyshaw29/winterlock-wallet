@@ -1,0 +1,20 @@
+{
+  "name": "@skandha/devnet-predeploy",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Replays mainnet deployment transactions onto the EIP-8141 devnet",
+  "scripts": {
+    "predeploy": "bun run src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "2.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.9",
+    "typescript": "5.4.5",
+    "vitest": "0.34.6"
+  }
+}

@@ -1,0 +1,9 @@
+.workshop-state.json
+node_modules
+scratch/
+.superpowers/
+contracts/out
+contracts/cache
+contracts/lib
+docs/
+contracts/fork/out
