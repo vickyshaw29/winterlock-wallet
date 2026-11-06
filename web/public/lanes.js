@@ -2,7 +2,7 @@
 // newest first, with its status and status timeline in the spec's words, retry links, and the "set aside for pending"
 // line. No DOM: board.js draws the rows.
 // Written with Claude Code (AI) for Vicky.
-import { formatGas, formatWei, formatWeiExact, nonceKeyParts, shortHex } from "./format.js";
+import { formatCount, formatGas, formatWei, formatWeiExact, nonceKeyParts, shortHex } from "./format.js";
 
 /** @import { TxRecord, TxStatus, WalletView } from "./api.js" */
 
@@ -286,4 +286,84 @@ export function changes(before, records) {
     before.set(key, rec.status);
   }
   return out;
+}
+
+// ------------------------------------------------------------------ the ledger's marks (design note 1-ledger.md, section 4)
+
+/**
+ * The rule under a lane's amount: "final", a double rule (included, the money moved); "single" (included, no receipt
+ * read yet, so whether the value moved is open); "void", a strike (refused or expired, or included with a frame
+ * reverted: the key was used, the value did not move); null while the lane is pending.
+ * @param {TxRecord} rec
+ * @returns {"final" | "single" | "void" | null}
+ */
+export function amountMark(rec) {
+  switch (rec.status) {
+    case "OnChain": return "final";
+    case "Included": return "single";
+    case "Reverted": case "Expired": case "Refused": return "void";
+    default: return null;
+  }
+}
+
+/**
+ * @typedef {Object} Stamp the cancellation stamp on a final lane
+ * @property {"chain" | "signer"} by the chain consumed the nonce key, or the signer journaled the leaf as burned
+ * @property {number | null} block the block that consumed the key, when known
+ * @property {string} words the stamp's second line: "in block 408,215", "on chain", "by the signer"
+ */
+
+/**
+ * The stamp a final lane carries: "burned, in block N" when the chain consumed its key (included, reverted or included
+ * with no receipt: the key is used either way), "burned, by the signer" when it never reached the chain (expired,
+ * refused). Null while the lane may still land. The block is the timeline's (included, else "key used by block N"),
+ * else the receipt's (stepsOf fills it in).
+ * @param {Pick<Row, "status" | "steps">} row
+ * @returns {Stamp | null}
+ */
+export function stampOf(row) {
+  if (!row.status.final) return null;
+  if (row.status.key === "expired" || row.status.key === "refused") return { by: "signer", block: null, words: "by the signer" };
+  const block = row.steps.find((s) => (s.key === "included" || s.key === "reverted") && s.block !== null)?.block
+    ?? row.steps.find((s) => s.key === "key")?.block ?? null;
+  return { by: "chain", block, words: block === null ? "on chain" : `in block ${formatCount(block)}` };
+}
+
+/**
+ * The stamp's fixed angle, 0 to 6 (the CSS classes tilt-0 to tilt-6, from -4 to +2 degrees), from the leaf number: a
+ * column of stamps looks hand-stamped but never random, and a lane's stamp never moves between draws.
+ * @param {number} leaf
+ */
+export function tiltOf(leaf) {
+  return ((leaf * 37) % 7 + 7) % 7;
+}
+
+/**
+ * A row's amount ("0.0025 ETH", "1,000 wei", "—") as its figure and unit, and how many decimals the figure has, so the
+ * board can pad each figure with hidden zeros and line the decimal points up.
+ * @param {string} amount
+ * @returns {{ fig: string, unit: string, decimals: number }}
+ */
+export function splitAmount(amount) {
+  const m = /^(.*?) (ETH|wei)$/.exec(amount);
+  const fig = m ? /** @type {string} */ (m[1]) : amount;
+  const dot = fig.indexOf(".");
+  return { fig, unit: m ? /** @type {string} */ (m[2]) : "", decimals: dot < 0 ? 0 : fig.length - dot - 1 };
+}
+
+/**
+ * The line a rotation rules the ledger off with, above the first lane of an older epoch: "Epoch 0 closed by the
+ * rotation in block N. Lanes below this line belong to the old tree." The block is the closed epoch's rotation lane's
+ * (its stamp's), when the board holds it. Null when row i is not the first of an older epoch.
+ * @param {Row[]} rows newest first
+ * @param {number} i
+ * @returns {string | null}
+ */
+export function epochRule(rows, i) {
+  const row = rows[i], above = rows[i - 1];
+  if (!row || !above || row.epoch === null || above.epoch === null || row.epoch >= above.epoch) return null;
+  const rotation = rows.find((r) => r.epoch === row.epoch && r.record.kind === "rotate" && stampOf(r)?.by === "chain");
+  const block = rotation ? stampOf(rotation)?.block ?? null : null;
+  const by = block === null ? "by a rotation" : `by the rotation in block ${formatCount(block)}`;
+  return `Epoch ${row.epoch} closed ${by}. Lanes below this line belong to the old tree.`;
 }

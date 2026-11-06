@@ -198,6 +198,7 @@ describe("GET /wallets and GET /wallets/:address", () => {
       leavesUsed: 0, leafCount: 16, lanesInFlight: 0, hybrid: false, locked: false, balanceWei: "20000000000000000",
       hotStart: 12, hotValueCapWei: "10000000000000000", hotFeeCapWei: "2000000000000000", allowedTarget: TARGET,
       tickets: { exported: 0, used: 0, left: 0 }, rotationPending: false,
+      leaves: { onChain: [], burned: [], inFlight: [], tickets: null },
     });
   });
 

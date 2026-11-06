@@ -1,6 +1,6 @@
-// What every screen shares: the wallet (?wallet=) and its header, the lane board polled every 2 s, the mempool switch, the
-// set-aside line and the parallel lanes' limits, the stalled-chain banner, the ticket device's trouble on the card, the
-// notice line, the status line (backend, chain, block age, FAKE CHAIN on 31337), the parallel-lanes plan.
+// What every screen shares: the wallet (?wallet=) and its account line, the lane board (the ledger) polled every 2 s, the
+// Mempool switch, set-aside and lane limits, the stalled-chain banner, the ticket device's trouble, the notice line, the
+// status line (the Fake chain band on 31337), the parallel-lanes plan, and the review aids ?theme= and ?motion=reduce.
 // Written with Claude Code (AI) for Vicky.
 import { ApiError, createApi } from "./api.js";
 import { createBoard } from "./board.js";
@@ -9,7 +9,7 @@ import {
   LANE_LIMITS_TEXT, deviceIssue, deviceIssueOf, errorText, mempoolNotice, planFailureText, planWords, readPlan, readStatus, stalledBanner,
   statusBanner, statusWords,
 } from "./flows.js";
-import { formatClock, formatWei, formatWeiExact, shortHex } from "./format.js";
+import { formatClock, formatCount, formatWei, formatWeiExact, shortHex } from "./format.js";
 import { laneRows, setAside, setAsideText } from "./lanes.js";
 
 /** @import { Api, PlanQuery, TxRecord, WalletView } from "./api.js" */
@@ -17,6 +17,19 @@ import { laneRows, setAside, setAsideText } from "./lanes.js";
 
 const TXS_MS = 2_000, WALLET_MS = 6_000, STATUS_MS = 10_000;
 const REMEMBER = "winterlock.wallet";
+
+/**
+ * Review aids for screenshots and the booth: ?theme=dark or ?theme=light overrides the OS colour scheme (style.css reads
+ * data-theme), ?motion=reduce makes every moment instant as prefers-reduced-motion does. Nothing is remembered.
+ */
+export function applyReviewAids() {
+  const root = typeof document === "undefined" ? null : document.documentElement;
+  if (!root) return;
+  const q = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+  const theme = q.get("theme");
+  if (theme === "dark" || theme === "light") root.dataset.theme = theme;
+  if (q.get("motion") === "reduce") root.classList.add("reduce-motion");
+}
 
 /** @param {string} key */
 function recall(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -44,6 +57,7 @@ export async function pickWallet(api) {
  * @property {() => TxRecord[]} records the latest lane board records
  * @property {() => Mempool} mempool what the Mempool switch says
  * @property {() => boolean} stalled
+ * @property {() => ChainStatus | null} chain the latest GET /api/status, read (polled every 10 s); null when not offered
  * @property {() => DeviceIssue | null} deviceIssue the ticket device cannot sign (409 device_unusable, or tickets cut
  *   whose device journal is missing): the cards say so, and no cut is offered
  * @property {<T>(button: HTMLButtonElement | null, fn: () => Promise<T>, onError?: (e: unknown) => void) => Promise<T | undefined>} run
@@ -87,7 +101,8 @@ export const PLAN_EVERY_MS = 30_000;
  * The parallel-lanes plan for a burst a page is about to send (GET /api/wallets/:address/lanes/plan): "N lanes: P relay
  * passes, about S s; set aside X of balance Y" and its warnings in the screen's words (planWarningText), never the
  * API's. update(w) takes the page's query (null: nothing to plan, the element is hidden) and asks for it only when it
- * differs from the last one asked, or when that answer is PLAN_EVERY_MS old; otherwise it draws the answer it has.
+ * differs from the last one asked, or when that answer is PLAN_EVERY_MS old; otherwise it draws the answer it has. The
+ * tickets cut and left count as part of the query: a cut or a spent ticket changes the plan's warnings at once.
  * Only the latest update draws. It never turns a button off: the backend decides.
  * @param {Api} api
  * @param {string} address
@@ -117,12 +132,12 @@ export function planView(api, address, target, query, opts = {}) {
       const q = query(w);
       const mine = ++drawn;
       if (!q) { target.hidden = true; target.replaceChildren(); return; }
-      const key = JSON.stringify([q.n, q.mode, q.valueWei, q.to]);
+      const key = JSON.stringify([q.n, q.mode, q.valueWei, q.to, w.tickets.exported, w.tickets.left]);
       if (!last || last.key !== key || Date.now() - last.at >= everyMs) last = { key, at: Date.now(), drawing: ask(q, w) };
       const d = await last.drawing;
       if (mine !== drawn) return; // a later update is drawing
       /** @type {Node[]} */
-      const parts = [el("p", { class: d.muted ? "muted" : "mono", text: d.line, title: d.title })];
+      const parts = [el("p", { class: d.muted ? "muted" : "num", text: d.line, title: d.title })];
       if (d.warnings.length) parts.push(el("ul", { class: "plan-warnings" }, ...d.warnings.map((x) => el("li", { text: x }))));
       target.replaceChildren(el("h4", { text: "Parallel-lanes plan" }), ...parts);
       target.hidden = false;
@@ -144,6 +159,7 @@ export function planView(api, address, target, query, opts = {}) {
  */
 export async function mountScreen(opts = {}) {
   const api = opts.api ?? createApi();
+  applyReviewAids();
   const banner = byId("banner"), head = byId("wallet-head"), notices = byId("notice"), status = byId("status");
   const setAsideEl = byId("set-aside"), issueEl = byId("device-issue");
   byId("lane-limits").textContent = LANE_LIMITS_TEXT;
@@ -228,27 +244,28 @@ export async function mountScreen(opts = {}) {
 
   /** @param {string} text @param {"ok" | "error"} [tone] */
   function notice(text, tone = "ok") {
-    notices.replaceChildren(el("span", { class: "mono when", text: formatClock(new Date().toISOString()) }), el("span", { class: tone === "error" ? "error" : undefined, text }));
+    notices.replaceChildren(el("span", { class: "when", text: formatClock(new Date().toISOString()) }), el("span", { class: tone === "error" ? "error" : undefined, text }));
   }
 
   function drawHead() {
     if (!wallet) return;
     const w = wallet;
     head.replaceChildren(el("dl", { class: "summary" },
-      item("wallet", shortHex(w.address, 6, 4), { mono: true, title: w.address }),
-      item("balance", formatWei(w.balanceWei), { mono: true, title: formatWeiExact(w.balanceWei) }),
-      item("epoch", String(w.epoch), { mono: true }),
-      item("leaves used", `${w.leavesUsed} of ${w.leafCount}`, { mono: true }),
-      item("lanes in flight", String(w.lanesInFlight), { mono: true }),
-      item("tickets", `${w.tickets.left} of ${w.tickets.exported}`, { mono: true }),
+      item("wallet", shortHex(w.address, 6, 4), { num: true, title: w.address }),
+      item("balance", formatWei(w.balanceWei), { num: true, lead: true, title: formatWeiExact(w.balanceWei) }),
+      item("epoch", String(w.epoch), { num: true }),
+      item("leaves used", `${w.leavesUsed} of ${formatCount(w.leafCount)}`, { num: true }),
+      item("lanes in flight", String(w.lanesInFlight), { num: true }),
+      item("tickets", `${w.tickets.left} of ${w.tickets.exported}`, { num: true }),
       w.rotationPending ? item("rotation", "pending: sends wait") : null));
   }
 
   function drawStatus() {
-    const parts = [el("span", { class: "mono", text: `backend ${backendUrl ?? "(via this server)"}` })];
+    const parts = [el("span", { text: `backend ${backendUrl ?? "(via this server)"}` })];
     if (chain) {
-      for (const words of statusWords(chain)) parts.push(el("span", { class: "mono", text: words }));
-      if (chain.fake) parts.push(el("strong", { class: "badge-fake", text: "FAKE CHAIN" }));
+      for (const words of statusWords(chain)) parts.push(el("span", { text: words }));
+      // practice data only: an Ink band carries the warning (the band, not capitals)
+      if (chain.fake) parts.push(el("strong", { class: "badge-fake", text: "Fake chain" }));
     } else if (!statusOffered) {
       parts.push(el("span", { class: "muted", text: "chain status: not offered by this backend" }));
     }
@@ -380,12 +397,13 @@ export async function mountScreen(opts = {}) {
     records: () => records,
     mempool,
     stalled: () => !!stalled,
+    chain: () => chain,
     deviceIssue: () => issue,
     run, fail, notice, refresh,
     onWallet: (f) => { walletFns.push(f); if (wallet) f(wallet); },
     onRecords: (f) => { recordFns.push(f); f(records); },
     updateSendable,
-    stop: () => { stopped = true; for (const t of timers) clearTimeout(t); },
+    stop: () => { stopped = true; for (const t of timers) clearTimeout(t); board.stop(); },
   };
 }
 

@@ -2,7 +2,7 @@
 // timeline lines, retry links between an expired lane and its retry, and the "set aside for pending" line.
 // Written with Claude Code (AI) for Vicky.
 import { describe, expect, test } from "bun:test";
-import { changes, laneRows, refusalOf, setAside, setAsideText, statusOf, stepOf, stepsOf } from "../public/lanes.js";
+import { amountMark, changes, epochRule, laneRows, refusalOf, setAside, setAsideText, splitAmount, stampOf, statusOf, stepOf, stepsOf, tiltOf } from "../public/lanes.js";
 import { H, at, rec, receipt } from "./records.ts";
 
 describe("status and steps", () => {
@@ -138,4 +138,49 @@ test("changes between polls: new lanes and changed statuses, each once", () => {
   expect(changes(seen, [rec({ txHash: H(1) })]).map((c) => [c.rec.txHash, c.from])).toEqual([[H(1), null]]);
   expect(changes(seen, [rec({ txHash: H(1) })])).toEqual([]);
   expect(changes(seen, [rec({ txHash: H(1), status: "OnChain" })]).map((c) => [c.rec.status, c.from])).toEqual([["OnChain", "Submitted"]]);
+});
+
+describe("the ledger's marks (design note 1-ledger.md, section 4)", () => {
+  test("the amount's rule by status: a double rule when the money moved, a single while no receipt says so, a strike when none moved", () => {
+    const marks = (["Submitted", "Unknown", "OnChain", "Included", "Reverted", "Expired", "Refused"] as const).map((status) => [status, amountMark(rec({ status }))]);
+    expect(marks).toEqual([["Submitted", null], ["Unknown", null], ["OnChain", "final"], ["Included", "single"], ["Reverted", "void"], ["Expired", "void"], ["Refused", "void"]]);
+  });
+
+  test("the stamp: the chain's block from the timeline or the receipt; by the signer for an expiry or a refusal; none while pending", () => {
+    const [onChain] = laneRows([rec({ status: "OnChain", lines: [["Submitted", 0], ["chain: key used by block 408215", 5_000], ["chain: OnChain in block 408215", 5_100]] })]);
+    expect(stampOf(onChain!)).toEqual({ by: "chain", block: 408_215, words: "in block 408,215" });
+    const [fromReceipt] = laneRows([rec({ status: "OnChain", receipt: receipt(1003), lines: [["Submitted", 0]] })]);
+    expect(stampOf(fromReceipt!)?.words).toBe("in block 1,003");
+    const [keyOnly] = laneRows([rec({ status: "Included", lines: [["Submitted", 0], ["chain: key used by block 77", 6_000], ["Included by block 77", 6_100]] })]);
+    expect(stampOf(keyOnly!)).toEqual({ by: "chain", block: 77, words: "in block 77" });
+    const [reverted] = laneRows([rec({ status: "Reverted", receipt: receipt(9), lines: [["Submitted", 0], ["Reverted in block 9", 3_000]] })]);
+    expect(stampOf(reverted!)?.words).toBe("in block 9"); // the key was used even though a frame reverted
+    const [unknownBlock] = laneRows([rec({ status: "Included", lines: [["Submitted", 0]] })]);
+    expect(stampOf(unknownBlock!)).toEqual({ by: "chain", block: null, words: "on chain" });
+    for (const status of ["Expired", "Refused"] as const) expect(stampOf(laneRows([rec({ status })])[0]!)).toEqual({ by: "signer", block: null, words: "by the signer" });
+    for (const status of ["Submitted", "Unknown"] as const) expect(stampOf(laneRows([rec({ status })])[0]!)).toBeNull();
+  });
+
+  test("the stamp's angle is fixed by the leaf, one of seven, never random", () => {
+    expect([0, 1, 2, 1014, 1015].map(tiltOf)).toEqual([0, 2, 4, (1014 * 37) % 7, (1015 * 37) % 7]);
+    expect(new Set(Array.from({ length: 70 }, (_, i) => tiltOf(i)))).toEqual(new Set([0, 1, 2, 3, 4, 5, 6]));
+  });
+
+  test("an amount split into figure and unit, with its decimals, so the board lines decimal points up", () => {
+    expect(splitAmount("0.00296836 ETH")).toEqual({ fig: "0.00296836", unit: "ETH", decimals: 8 });
+    expect(splitAmount("0 ETH")).toEqual({ fig: "0", unit: "ETH", decimals: 0 });
+    expect(splitAmount("1,000 wei")).toEqual({ fig: "1,000", unit: "wei", decimals: 0 });
+    expect(splitAmount("—")).toEqual({ fig: "—", unit: "", decimals: 0 });
+  });
+
+  test("a rotation rules the ledger off above the first lane of the older epoch, naming the rotation's block", () => {
+    const rows = laneRows([
+      rec({ txHash: H(3), nonceKey: "0x100000001", leaf: 1, createdAt: at(30_000) }),
+      rec({ txHash: H(2), nonceKey: "0x5", leaf: 5, kind: "rotate", mode: "keyed", status: "OnChain", receipt: receipt(408_300), createdAt: at(20_000) }),
+      rec({ txHash: H(1), nonceKey: "0x4", leaf: 4, createdAt: at(10_000) }),
+    ]);
+    expect(rows.map((_, i) => epochRule(rows, i))).toEqual([null, "Epoch 0 closed by the rotation in block 408,300. Lanes below this line belong to the old tree.", null]);
+    const bare = laneRows([rec({ txHash: H(3), nonceKey: "0x100000001", leaf: 1, createdAt: at(30_000) }), rec({ txHash: H(1), nonceKey: "0x4", leaf: 4, createdAt: at(10_000) })]);
+    expect(epochRule(bare, 1)).toBe("Epoch 0 closed by a rotation. Lanes below this line belong to the old tree.");
+  });
 });

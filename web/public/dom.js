@@ -51,11 +51,12 @@ export function byId(id, type) {
 }
 
 /**
- * A definition list item for summaries: term and value, the value in mono when asked.
+ * A definition list item for facts: term (in Print) and value (in Ink). num (or its old name mono): tabular figures,
+ * never a monospace font. lead: the line's main figure, set larger (the balance).
  * @param {string} term
  * @param {Child} value
- * @param {{ mono?: boolean, title?: string }} [opts]
+ * @param {{ num?: boolean, mono?: boolean, lead?: boolean, title?: string }} [opts]
  */
 export function item(term, value, opts = {}) {
-  return el("div", { class: "kv" }, el("dt", { text: term }), el("dd", { class: opts.mono ? "mono" : undefined, title: opts.title }, value));
+  return el("div", { class: opts.lead ? "kv lead" : "kv" }, el("dt", { text: term }), el("dd", { class: opts.num || opts.mono ? "num" : undefined, title: opts.title }, value));
 }

@@ -3,7 +3,7 @@
 // Written with Claude Code (AI) for Vicky.
 import { describe, expect, test } from "bun:test";
 import {
-  formatAgo, formatClock, formatGas, formatOffset, formatWei, formatWeiExact, isAddress, nonceKeyParts, parseEth, shortHex, toBigInt, weiToEthInput,
+  formatAgo, formatClock, formatCount, formatGas, formatOffset, formatWei, formatWeiExact, isAddress, nonceKeyParts, parseEth, shortHex, toBigInt, weiToEthInput,
 } from "../public/format.js";
 
 describe("formatWei and formatWeiExact", () => {
@@ -65,6 +65,7 @@ describe("the rest", () => {
     expect(formatGas("60000")).toBe("60,000");
     expect(formatGas("0xea60")).toBe("60,000");
     expect(formatGas(null)).toBe("—");
+    expect([formatCount(408_215), formatCount(7), formatCount("1024"), formatCount(null)]).toEqual(["408,215", "7", "1,024", "—"]);
     expect(shortHex("0x5544596212F91984C986A919C8026DF0576816f9")).toBe("0x5544…16f9");
     expect(shortHex("0x1")).toBe("0x1");
     expect(shortHex(null)).toBe("—");

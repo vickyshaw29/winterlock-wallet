@@ -21,11 +21,16 @@ const TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
 };
 
-/** Scripts and data only from this origin; the two Google Fonts hosts for the fonts (a system font when offline). */
+/**
+ * Scripts, styles, fonts and data only from this origin: the two fonts are self-hosted in public/fonts/, so a page makes
+ * no third-party request (CROPS). No 'unsafe-inline': a style attribute in markup is refused; the pages set the few
+ * per-element values they need (a stub's stagger, the torn ticket's place) through the CSSOM, which the CSP allows.
+ */
 export const CSP = [
-  "default-src 'none'", "script-src 'self'", "style-src 'self' https://fonts.googleapis.com", "font-src https://fonts.gstatic.com",
+  "default-src 'none'", "script-src 'self'", "style-src 'self'", "font-src 'self'",
   "connect-src 'self'", "img-src 'self' data:", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
 ].join("; ");
 

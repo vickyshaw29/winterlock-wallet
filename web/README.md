@@ -31,8 +31,8 @@ Every screen has:
   draft's 4 per key and 64 per unstaked sender are labelled as the draft's. The public mempool's one pending per sender
   is labelled not yet confirmed on the devnet.
 - **The stalled-chain banner**: while the backend answers 503, or `GET /api/status` says stalled, sending is off.
-- **The status line**: the backend's URL, the chain id, the latest block and its age, and a FAKE CHAIN badge on
-  chain 31337.
+- **The status line**: the backend's URL, the chain id, the latest block and its age, and a "Fake chain" band (Ink,
+  the band carries the warning) on chain 31337.
 
 What the screens send, and when they hold back:
 
@@ -57,6 +57,23 @@ What the screens send, and when they hold back:
   before it cuts. The backend's 409 detail names the journal file to recover.
 - Not built, so shown disabled and labelled: the recent-root countdown and Stop renewing (Level B), and End session
   (no endpoint).
+
+## The look: the Ledger direction
+
+Vicky picked direction 1, "Ledger" (design note `.claude/briefs/ui-directions/1-ledger.md`, local): the wallet as a book
+of numbered one-time keys. A ledger-green page and six inks, each with one owner (Print for what the form asks, Ink
+for what is true now, Serial red for numbers the key tree prints, Stamp violet for burned); Besley for those numbers,
+Archivo for everything else; no monospace. The lane board is a ruled ledger: a double rule under an amount that moved,
+a strike where none did, and on every final line a cancellation stamp, "burned, in block N" when the chain consumed the
+key or "burned, by the signer" when the leaf never reached it. Motion only on the moments the note names (a ledger line
+written when a lane is admitted, the stamp landing at inclusion, a ticket tearing off when a hot payment is sent), each
+once, never on load, and instant under `prefers-reduced-motion`.
+
+- `public/style.css`: tokens (light and dark), fonts, the shared frame, controls, the register, the stub strip and the
+  ledger. Each page adds its own file (`hot-cold.css`, `agent.css`, `session.css`, `index.css`).
+- `public/board.js`: the ledger; `public/register.js`: the key register (one cell per leaf, coloured from the wallet
+  view's `leaves` and the lane records), the stub strip and the ticket tear.
+- Review aids in the URL: `?theme=dark` or `?theme=light`, `?motion=reduce`.
 
 ## Run them
 
@@ -94,7 +111,7 @@ source /var/folders/…/fakechain-XXXXXX/env.sh
 cd backend && bun src/main.ts
 # shell 3: the screens
 cd web && bun serve.ts
-# then open http://127.0.0.1:5173/ : the status line says FAKE CHAIN
+# then open http://127.0.0.1:5173/ : the status line carries the "Fake chain" band
 ```
 
 Take every `WL_*` of the backend from that `env.sh`, and set none on the command line: the backend has no fake-chain
@@ -127,8 +144,9 @@ scripts read. The backend never passes a seed in `PQ_SEED`; it strips it from th
 
 `serve.ts` listens on 127.0.0.1 only and answers only requests addressed to its own host and port, with no Origin or
 its own: forwarding drops the browser's Host and Origin, so it makes the backend's two checks for itself first. Only
-the content type travels on. Pages get a content security policy: scripts and data from this origin only, fonts from
-Google Fonts, with system fonts as the fallback when offline.
+the content type travels on. Pages get a content security policy: scripts, styles, fonts and data from this origin
+only, no third-party host (CROPS). The two fonts are self-hosted in `public/fonts/` (Archivo and Besley, latin subsets,
+SIL OFL 1.1, their licence texts beside them) and served as `font/woff2`.
 
 ## Tests
 
@@ -151,7 +169,11 @@ stuck payment waits out its real 4-second deadline.
 | --- | --- |
 | `format.test.ts` | Amounts, gas, hashes, nonce keys as lanes, times |
 | `lanes.test.ts` | Rows from the backend's records, the status timeline, retry links, the set-aside line with and without `maxCostWei` |
-| `board.test.ts` | The lane board drawn on a fake DOM |
+| `board.test.ts` | The lane board drawn on a fake DOM: the ledger's amount rules, the stamps, the moments once per lane |
+| `register.test.ts` | `register.js`: each leaf's state from the wallet view's `leaves` and the records, the next ticket, the stub strip (an unchanged stub keeps its moment through a second draw), the moments once, the tear skipped where it cannot run |
+| `ledger-hot-cold.test.ts` | The hot-and-cold screen in the Ledger direction: the ticket's serial and machine line, the register and the stubs, when the ticket tears, the folds below 600 px |
+| `ledger-agent.test.ts` | The agent screen: the count, the stub strip, Max loss ruled again after Server compromised only, the stubs Fire lifts, the day book's serials |
+| `ledger-session.test.ts` | The session screen and the start page: the punch board's states and moments, the card's count and stubs, the start page's wallet lines |
 | `flows.test.ts` | The exact body each button sends, the inline checks, the device journal's words, the lane limits' words, the plan's words (every backend warning in the screens' words, no API wording), the status line, the API client |
 | `screens.test.ts` | The three page scripts on a fake DOM parsed from their own HTML, against a fake API: what each click sends, the cards, the plan (asked again only when its query changes or after 30 s), the banner |
 | `pages.test.ts` | Every id a script asks for, no inline script or style, the attribution line, the wording rules (no low fee, draft numbers labelled, parallel lanes) |

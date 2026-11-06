@@ -340,7 +340,7 @@ export function installDom(doc: FakeDocument, search = ""): () => void {
   const g = globalThis as Record<string, unknown>;
   const set: Record<string, unknown> = {
     document: doc, HTMLElement: FakeElement, HTMLAnchorElement: FakeAnchor, HTMLButtonElement: FakeButton, HTMLInputElement: FakeInput,
-    HTMLFieldSetElement: FakeFieldSet, HTMLFormElement: FakeForm, HTMLTableCellElement: FakeTableCell,
+    HTMLFieldSetElement: FakeFieldSet, HTMLFormElement: FakeForm, HTMLTableCellElement: FakeTableCell, HTMLOListElement: FakeOList,
     CSS: { escape: (s: string) => s.replace(/["\\]/g, "\\$&") }, location: { search },
   };
   const before = Object.fromEntries(Object.keys(set).map((k) => [k, Object.getOwnPropertyDescriptor(g, k)]));

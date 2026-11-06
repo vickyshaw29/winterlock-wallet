@@ -24,6 +24,8 @@ describe("wiring", () => {
       expect(html.match(/name="mempool" value="(alt|public)"/g)).toEqual(['name="mempool" value="alt"', 'name="mempool" value="public"']);
       expect(html).toMatch(/<fieldset data-sends/); // what the stalled banner turns off
       expect(html).toContain(`aria-current="page"`);
+      expect(html).toContain(`<link rel="stylesheet" href="style.css">\n<link rel="stylesheet" href="${page}.css">`);
+      expect(fs.existsSync(path.join(PUBLIC, `${page}.css`))).toBe(true);
     });
   }
 
@@ -63,22 +65,44 @@ describe("rules", () => {
     }
   });
 
-  test("the only remote resource is Google Fonts, with a system fallback in the stylesheet", () => {
-    for (const f of files.filter((x) => x.endsWith(".html"))) {
-      const remote = [...read(f).matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)].map((m) => new URL(m[1]!).host);
-      expect([f, [...new Set(remote)].sort()]).toEqual([f, ["fonts.googleapis.com", "fonts.gstatic.com"]]);
+  test("no remote resource at all: no page, script or stylesheet names Google Fonts or another host; the fonts are self-hosted", () => {
+    for (const f of files) {
+      const s = read(f);
+      expect([f, /googleapis|gstatic/.test(s)]).toEqual([f, false]);
+      if (f.endsWith(".html")) {
+        expect([f, [...s.matchAll(/(?:src|href)="(?:https?:)?\/\/[^"]+"/g)].map((m) => m[0])]).toEqual([f, []]);
+        expect([f, s.includes('<link rel="stylesheet" href="style.css">')]).toEqual([f, true]);
+      }
+      if (f.endsWith(".css")) expect([f, [...s.matchAll(/url\(\s*["']?(?:https?:)?\/\//g)].length]).toEqual([f, 0]);
     }
+    // the two faces of the design note, latin subsets, swapped in when loaded, each file present with its OFL text
     const css = read("style.css");
-    expect(css).toMatch(/--sans: Inter, ui-sans-serif, system-ui/);
-    expect(css).toMatch(/--mono: "JetBrains Mono", ui-monospace/);
-    expect(css).toMatch(/@media \(prefers-color-scheme: dark\)/);
+    const faces = [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]!);
+    expect(faces.map((f) => /font-family: "([^"]+)"/.exec(f)?.[1])).toEqual(["Archivo", "Besley"]);
+    const LATIN = "unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;";
+    for (const face of faces) {
+      expect(face).toContain("font-display: swap;");
+      expect(face).toContain(LATIN);
+      const url = /src: url\("(fonts\/[a-z-]+\.woff2)"\) format\("woff2"\)/.exec(face)?.[1];
+      expect([url, url !== undefined && fs.existsSync(path.join(PUBLIC, url))]).toEqual([url, true]);
+    }
+    expect(faces[0]).toContain("font-stretch: 62% 125%;"); // Archivo's width axis: condensed heads, the wide machine line
+    for (const ofl of ["OFL-Archivo.txt", "OFL-Besley.txt"]) expect(fs.existsSync(path.join(PUBLIC, "fonts", ofl))).toBe(true);
+    expect(css).toMatch(/--sans: "Archivo", /);
+    expect(css).toMatch(/--serif: "Besley", /);
+    // no monospace anywhere, in any stylesheet; light and dark, by the OS setting or the ?theme= aid
+    const uncommented = (f: string) => read(f).replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const f of files.filter((x) => x.endsWith(".css"))) expect([f, /monospace|JetBrains|\bInter\b/.test(uncommented(f))]).toEqual([f, false]);
+    expect(css).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\)/);
+    expect(css).toContain(':root[data-theme="dark"] {');
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\*, \*::before, \*::after \{ animation: none !important; transition: none !important; \}/);
   });
 
   test("table cells stay table cells on desktop: no flex or grid box on a cell the lane board draws", () => {
     // outside @media blocks, a rule whose last compound names a cell (td, th, or a class board.js puts on a td) sets no display
     const cellClasses = [...read("board.js").matchAll(/el\("td", \{[^}]*?\bclass: (?:"([^"]+)"|`([^`]+)`)/g)].flatMap((m) => (m[1] ?? m[2] ?? "").split(/\s+/));
     expect(cellClasses).toEqual(expect.arrayContaining(["action", "status-cell", "num", "lane", "empty"]));
-    let css = read("style.css").replace(/\/\*[\s\S]*?\*\//g, "");
+    let css = files.filter((f) => f.endsWith(".css")).map(read).join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
     for (let m; (m = /@media[^{]*\{/.exec(css));) { // cut each @media block, nested braces counted
       let depth = 1, i = m.index + m[0].length;
       for (; depth > 0 && i < css.length; i++) depth += css[i] === "{" ? 1 : css[i] === "}" ? -1 : 0;
@@ -96,7 +120,7 @@ describe("rules", () => {
       const s = read(f);
       expect([f, /\bleafs\b/i.test(s), /leaf\$\{[^}]*"s"/.test(s)]).toEqual([f, false, false]);
     }
-    for (const page of SCREENS) expect(read(`${page}.html`)).toMatch(/<fieldset data-sends class="scene" id="scene-fields">\s*<button class="btn primary" type="button" id="play">Play scene<\/button>/);
+    for (const page of SCREENS) expect(read(`${page}.html`)).toMatch(/<fieldset data-sends class="scene" id="scene-fields">\s*<button class="btn" type="button" id="play">Play scene<\/button>/);
   });
 
   test("no fee bump anywhere: the screens never offer one", () => {

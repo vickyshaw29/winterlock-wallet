@@ -13,8 +13,8 @@ import { ApiError, type Api, type SendBody, type WalletView } from "../public/ap
 import * as flows from "../public/flows.js";
 import { start as startHotCold } from "../public/hot-cold.js";
 import { start as startSession } from "../public/session.js";
-import { PLAN_EVERY_MS } from "../public/ui.js";
-import { FakeButton, FakeEvent, FakeFieldSet, FakeInput, installDom, parsePage, type FakeDocument, type FakeElement } from "./fake-dom.ts";
+import { PLAN_EVERY_MS, applyReviewAids } from "../public/ui.js";
+import { FakeButton, FakeDocument, FakeEvent, FakeFieldSet, FakeInput, installDom, parsePage, type FakeElement } from "./fake-dom.ts";
 import { H } from "./records.ts";
 
 const PUBLIC = path.resolve(import.meta.dir, "../public");
@@ -229,11 +229,11 @@ describe("hot and cold", () => {
     expect(s.$("banner").hidden).toBe(true);
   });
 
-  test("the status line: chain, latest block N, X s ago, FAKE CHAIN; a stalled status raises the banner; a 404 says so", async () => {
+  test("the status line: chain, latest block N, X s ago, the Fake chain band; a stalled status raises the banner; a 404 says so", async () => {
     let s = await open("hot-cold");
     const parts = () => s.$("status").children.map((c) => c.text);
-    expect(parts()).toEqual(["backend http://127.0.0.1:8787", "chain 31337", "latest block 1002, 4 s ago", "FAKE CHAIN"]);
-    expect(s.$("status").querySelector("strong.badge-fake")!.text).toBe("FAKE CHAIN");
+    expect(parts()).toEqual(["backend http://127.0.0.1:8787", "chain 31337", "latest block 1002, 4 s ago", "Fake chain"]);
+    expect(s.$("status").querySelector("strong.badge-fake")!.text).toBe("Fake chain");
     s = await open("hot-cold", view(), { chainId: 1337, head: 408_262, headAgeSeconds: 120, stalled: true, fake: false });
     expect(parts()).toEqual(["backend http://127.0.0.1:8787", "chain 1337", "latest block 408262, 2 min ago"]);
     expect([s.$("banner").hidden, s.$("banner-text").text]).toEqual([false, "The chain looks stalled: latest block 408262, 2 min ago. The backend refuses to sign until it moves, so sending is off."]);
@@ -477,6 +477,18 @@ describe("the parallel-lanes plan before Fire and Grant", () => {
     expect(s.btn("fire").disabled).toBe(false);
   });
 
+  test("agent: the tickets are part of the plan's query, so a cut changes its warnings at once, not 30 s later", async () => {
+    const none = `only 0 ticket(s) are left on the ticket device: the burst would stop after 0; cut some with POST /api/wallets/${A}/tickets`;
+    const s = await open("agent", view({ tickets: { exported: 0, used: 0, left: 0 } }), FAKE_STATUS, (f) => { f.plans.answer = () => ({ ...PLAN, warnings: [none] }); });
+    expect(planOf(s, "fire-plan").warnings).toEqual(["No tickets left with the agent: cut some on the cold device."]);
+    s.plans.answer = () => ({ ...PLAN, warnings: [] });
+    await s.refresh(); // nothing changed: the answer it has
+    expect([s.plans.asked.length, planOf(s, "fire-plan").warnings.length]).toEqual([1, 1]);
+    s.w.tickets = { exported: 10, used: 0, left: 10 }; // the cold device cut ten tickets
+    await s.refresh();
+    expect([s.plans.asked.length, planOf(s, "fire-plan").warnings]).toEqual([2, []]);
+  });
+
   test("agent: a backend without the route (404) says not offered; a failure says why in plain words, the backend's own in the tooltip; Fire still sends", async () => {
     const s = await open("agent", view({ tickets: { exported: 10, used: 0, left: 10 } }));
     expect(planOf(s, "fire-plan")).toEqual({ hidden: false, head: "Parallel-lanes plan", line: "not offered by this backend", warnings: [] });
@@ -523,4 +535,17 @@ describe("lane limits in the spec's words", () => {
       expect(s.$("notice").text).toContain(flows.mempoolNotice("alt"));
     }
   });
+});
+
+test("review aids in the URL: ?theme=dark or ?theme=light sets data-theme, ?motion=reduce makes the moments instant; nothing else does", () => {
+  for (const [search, theme, reduce] of [["?theme=dark&motion=reduce", "dark", true], ["?theme=light", "light", false], ["?theme=neon", null, false], ["", null, false]] as const) {
+    const doc = new FakeDocument();
+    const restore = installDom(doc, search);
+    try {
+      applyReviewAids();
+      expect([search, doc.documentElement.getAttribute("data-theme"), doc.documentElement.classList.contains("reduce-motion")]).toEqual([search, theme, reduce]);
+    } finally {
+      restore();
+    }
+  }
 });
