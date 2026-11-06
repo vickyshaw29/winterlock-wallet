@@ -1,196 +1,69 @@
-/* Companion page for the Winterlock MetaMask Flask Snap: a plain ledger sheet in system fonts, light and dark, no
-   downloads. Written with Claude Code (AI) for Vicky. */
-
-:root {
-  color-scheme: light dark;
-  --paper: #f6f3ec;
-  --sheet: #fffdf8;
-  --ink: #1c1b18;
-  --muted: #5d5a52;
-  --rule: #d9d3c5;
-  --accent: #8a2b1f;
-  --on-accent: #ffffff;
-  --ok: #1f5f3a;
-  --warn-bg: #fbf0d9;
-  --warn-ink: #5f3b00;
-  --error: #8a2b1f;
-  --focus: #1d4ed8;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #15140f;
-    --sheet: #1d1c16;
-    --ink: #ece8dd;
-    --muted: #a9a395;
-    --rule: #3a372f;
-    --accent: #e0806f;
-    --on-accent: #15140f;
-    --ok: #7fc39a;
-    --warn-bg: #2e2513;
-    --warn-ink: #f0cf8a;
-    --error: #f0a191;
-    --focus: #93b4ff;
-  }
-}
-
-*, *::before, *::after { box-sizing: border-box; }
-[hidden] { display: none !important; }
-html { -webkit-text-size-adjust: 100%; }
-
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font: 16px/1.5 var(--sans);
-}
-
-.masthead, main, footer {
-  max-width: 46rem;
-  margin: 0 auto;
-  padding-left: 16px;
-  padding-right: 16px;
-}
-
-.masthead { padding-top: 32px; }
-.masthead::after { content: ""; display: block; border-bottom: 2px solid var(--ink); }
-
-h1 {
-  font: 600 clamp(1.6rem, 6vw, 2.25rem)/1.15 var(--serif);
-  letter-spacing: -0.01em;
-  margin: 0 0 8px;
-}
-
-.lede { margin: 0 0 16px; color: var(--muted); max-width: 38rem; }
-
-section { padding: 24px 0; border-bottom: 1px solid var(--rule); }
-
-h2 {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font: 600 1.25rem/1.2 var(--serif);
-  margin: 0 0 16px;
-}
-
-.step {
-  font: 600 0.8rem/1 var(--mono);
-  color: var(--accent);
-  border: 1px solid currentColor;
-  border-radius: 2px;
-  padding: 3px 6px;
-}
-
-.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-
-button {
-  min-height: 44px;
-  padding: 10px 16px;
-  font: 600 0.95rem/1.2 var(--sans);
-  color: var(--on-accent);
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  cursor: pointer;
-}
-button.secondary { color: var(--ink); background: transparent; border-color: var(--ink); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-
-label { display: block; margin-bottom: 4px; font-size: 0.9rem; font-weight: 600; }
-.field { margin-bottom: 12px; }
-
-input {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  font: 1rem/1.3 var(--mono);
-  color: var(--ink);
-  background: var(--sheet);
-  border: 1px solid var(--muted);
-  border-radius: 4px;
-}
-
-.row { display: flex; gap: 8px; }
-.row input { flex: 1; min-width: 0; }
-
-.facts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 6px 16px;
-  margin: 0 0 16px;
-}
-.facts div { display: contents; }
-dt { color: var(--muted); font-size: 0.9rem; }
-dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-
-.hex, td { font-family: var(--mono); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
-
-.note { margin: 0; color: var(--muted); font-size: 0.9rem; }
-
-.notice {
-  margin: 16px 0 0;
-  padding: 10px 12px;
-  color: var(--warn-ink);
-  background: var(--warn-bg);
-  border-left: 3px solid currentColor;
-}
-
-.result {
-  margin: 12px 0 0;
-  padding-left: 12px;
-  border-left: 3px solid var(--rule);
-  overflow-wrap: anywhere;
-}
-.result.error { color: var(--error); border-left-color: var(--error); }
-
-a { color: var(--accent); text-underline-offset: 2px; }
-
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th {
-  padding: 8px 12px 6px 0;
-  font: 600 0.75rem/1.2 var(--sans);
-  letter-spacing: 0.06em;
-  text-align: left;
-  text-transform: uppercase;
-  color: var(--muted);
-  border-bottom: 2px solid var(--ink);
-}
-td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; vertical-align: top; }
-td.empty { font-family: var(--sans); color: var(--muted); white-space: normal; }
-
-.st { font-family: var(--sans); font-weight: 600; }
-.st-onchain { color: var(--ok); }
-.st-submitted, .st-reserved { color: var(--accent); }
-.st-burned { color: var(--muted); text-decoration: line-through; }
-.why { display: block; max-width: 18rem; font: 0.8rem/1.3 var(--sans); color: var(--muted); white-space: normal; }
-
-#poll { margin-top: 12px; }
-
-footer { padding-top: 16px; padding-bottom: 32px; color: var(--muted); font-size: 0.9rem; }
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
+/* Flask setup uses the wallet workspace's exact design assets, with a clear sequence from connection to signing.
+   Written with Codex (OpenAI) for Vicky. RPC behavior remains in the existing app.js. */
+@import url("workspace.css");
+.snap-app main { gap: 30px; }
+.connection-state { color: var(--print); font-size: 12px; }
+.setup-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; padding: 22px 0 28px; margin: 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); gap: 24px; }
+.setup-progress li { display: flex; gap: 12px; align-items: start; color: var(--print); font-size: 13px; }
+.setup-progress small { display: block; font-size: 11px; color: var(--print); margin-top: 4px; }
+.phase-n { display: grid; place-items: center; width: 27px; height: 27px; flex: none; border: 1px solid var(--rule-strong); border-radius: 50%; font-size: 11px; }
+.setup-progress .active { color: var(--ink); }
+.setup-progress .active .phase-n { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.setup-progress .done .phase-n { border-color: var(--stamp); color: var(--stamp); }
+.setup-layout { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 38px; align-items: start; }
+.setup-authority { display: grid; gap: 30px; }
+.setup-section { display: grid; gap: 20px; align-content: start; padding: 26px; border: 1px solid var(--rule); border-radius: 14px; background: var(--stock); }
+.setup-section .pane-head, .snap-send .pane-head { align-items: center; }
+.section-step { color: var(--print); font-size: 11px; }
+.section-copy { color: var(--print); font-size: 13px; line-height: 22px; max-width: 60ch; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.faucet-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-block: 2px; color: var(--print); font-size: 12px; }
+.faucet-line .link { min-height: 28px; }
+.connection-details { padding-top: 16px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--print); }
+.connection-details > summary { cursor: pointer; }
+.connection-details[open] > summary { margin-bottom: 18px; }
+.snap-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 0; }
+.snap-facts > div { min-width: 0; }
+.snap-facts > div:first-child, .snap-facts > div:nth-child(3), .snap-facts > div:nth-child(5) { grid-column: 1 / -1; }
+.snap-facts dt { color: var(--print); font-size: 11px; }
+.snap-facts dd { margin: 4px 0 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+.account-facts { margin-bottom: 24px; }
+.account-facts > div { grid-column: 1 / -1; }
+#account-balance { font-size: 28px; line-height: 36px; font-weight: 450; letter-spacing: -.03em; }
+#fund-form { display: grid; gap: 9px; }
+#fund-form > label { font-size: 12px; color: var(--print); }
+#fund-form input { flex: 1 1 100px; }
+#no-account { display: grid; gap: 16px; }
+.note { color: var(--print); font-size: 12px; line-height: 20px; }
+.snap-send { display: grid; gap: 22px; padding: 28px; border: 1px solid var(--ticket-rule); border-radius: 18px; background: var(--stock); box-shadow: var(--ticket-shadow); }
+.send-readiness { padding: 13px 15px; color: var(--print); background: var(--ledger); border: 1px solid var(--rule); border-radius: 8px; font-size: 12px; line-height: 21px; }
+.send-readiness.ready { color: var(--stamp); background: var(--soft-accent); }
+#send-form { display: grid; gap: 22px; }
+.snap-amount { position: relative; display: block; }
+.snap-amount input { height: 82px; background: var(--ledger); padding-right: 80px; font-size: 38px; font-weight: 400; letter-spacing: -.03em; }
+.snap-amount .currency { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; gap: 8px; align-items: center; color: var(--ink); font-size: 13px; pointer-events: none; }
+.currency svg { width: 13px; height: 22px; color: var(--print); }
+.signing-note { display: flex; gap: 11px; padding: 16px 0; border-top: 1px dashed var(--ticket-rule); border-bottom: 1px dashed var(--ticket-rule); font-size: 12px; color: var(--ink); }
+.signing-note .security-mark { border-color: var(--serial); }
+.signing-note small { display: block; margin-top: 5px; color: var(--print); font-size: 11px; line-height: 18px; }
+#send { width: 100%; min-height: 52px; font-size: 14px; }
+.result { padding: 14px 16px; border: 1px solid var(--rule); border-left: 3px solid var(--accent); border-radius: 7px; background: var(--ledger); color: var(--ink); font-size: 13px; line-height: 22px; overflow-wrap: anywhere; }
+.result.error { border-left-color: var(--danger); color: var(--danger); }
+.notice { padding: 14px 16px; border-left: 3px solid var(--serial); background: var(--stock); color: var(--print); font-size: 13px; line-height: 22px; }
+.snap-board table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.snap-board th { color: var(--print); font-size: 12px; font-weight: 500; text-align: left; padding: 0 12px 14px 0; border-bottom: 1px solid var(--rule); }
+.snap-board td { padding: 20px 12px 20px 0; border-bottom: 1px solid var(--rule); font-size: 13px; overflow-wrap: anywhere; vertical-align: top; }
+.snap-board th:first-child { width: 12%; }.snap-board th:nth-child(2) { width: 20%; }.snap-board th:nth-child(3) { width: 35%; }
+.snap-board .empty { color: var(--print); padding: 30px 0; }
+.st-onchain { color: var(--stamp); }.st-submitted, .st-reserved { color: var(--accent); }.st-burned { color: var(--danger); }
+.why { display: block; color: var(--print); font-size: 12px; line-height: 20px; margin-top: 5px; }
+@media (max-width: 1100px) { .setup-layout { gap: 24px; } .setup-section, .snap-send { padding: 22px; } }
+@media (max-width: 820px) { .setup-layout { grid-template-columns: minmax(0, 1fr); } .setup-progress { gap: 14px; }.setup-progress li { flex-direction: column; gap: 8px; }.setup-progress small { display: none; } }
 @media (max-width: 480px) {
-  .row { flex-direction: column; }
-  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
-  dd { margin-bottom: 8px; }
-  .actions button { flex: 1 1 100%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .setup-section, .snap-send { padding: 20px; }.setup-progress li { font-size: 12px; }
+  .actions { display: grid; grid-template-columns: minmax(0, 1fr); }.actions .btn { width: 100%; }
+  .snap-app .page-intro .workspace-context { justify-content: space-between; }
+  .snap-facts { grid-template-columns: minmax(0, 1fr); }.snap-facts > div { grid-column: 1 / -1; }
+  .snap-amount input { font-size: 34px; height: 76px; }
+  .snap-board thead { display: none; }.snap-board tbody { display: block; }.snap-board tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; padding: 18px 0; border-bottom: 1px solid var(--rule); }.snap-board td { display: block; border: 0; padding: 0; min-width: 0; }.snap-board td:nth-child(3), .snap-board td:nth-child(4), .snap-board td.empty { grid-column: 1 / -1; }.snap-board td:first-child:not(.empty)::before { content: "Leaf "; color: var(--print); }.snap-board td:nth-child(2)::before { content: "Lane "; color: var(--print); }
 }

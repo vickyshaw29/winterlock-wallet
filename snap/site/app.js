@@ -3,7 +3,9 @@
 // transfers through the Snap or from MetaMask itself (the account is also a MetaMask ERC-4337 account; MetaMask posts
 // its user operations to the local bundler), and lists each lane. Plain ES module, no build step. It talks to MetaMask Flask and, for
 // the faucet only, to the devnet gateway; the seed and the journal of used leaves stay inside the Snap.
-// Written with Claude Code (AI) for Vicky.
+// Written with Claude Code (AI) for Vicky. Interface refinement written with Codex (OpenAI) for Vicky.
+
+import { drawActivity } from "./activity.js";
 
 export const SNAP_ID = "local:http://localhost:15191";
 const DEVNET = Object.freeze({
@@ -96,6 +98,7 @@ function pickEoa(accounts) {
   return (accounts ?? []).find((a) => a.toLowerCase() !== mine) ?? null;
 }
 
+let latestPayment = null;
 let flask = null; // the provider that announced itself as MetaMask Flask (EIP-6963); else window.ethereum
 const eth = () => flask ?? globalThis.ethereum ?? null;
 function need() {
@@ -143,7 +146,7 @@ async function run(kind, resultId, fn) {
   try {
     await fn();
   } catch (e) {
-    say(resultId, rejected(e) ? (kind === "send" || kind === "mm" ? "Rejected in MetaMask: no leaf signed." : "Rejected in MetaMask.") : errText(e), "error");
+    say(resultId, rejected(e) ? (kind === "send" || kind === "mm" ? "Rejected in Flask: no leaf was used." : "Rejected in Flask.") : errText(e), "error");
   } finally {
     state.busy = null;
     render();
@@ -156,7 +159,7 @@ async function connect() {
   const p = need();
   if (!(await isFlask(p))) { show("flask-missing", true); throw new Error(FLASK_NEEDED); }
   show("flask-missing", false);
-  say("connect-result", "Approve the Snap in MetaMask…");
+  say("connect-result", "Approve the Snap in Flask…");
   const installed = await p.request({ method: "wallet_requestSnaps", params: { [SNAP_ID]: {} } });
   const snap = installed?.[SNAP_ID];
   if (!snap || snap.error) throw new Error(`The Snap did not install: ${errText(snap?.error ?? "MetaMask did not answer for it")}`);
@@ -204,7 +207,7 @@ async function checkNetwork() {
   try {
     const chainId = await p.request({ method: "eth_chainId" });
     if (chainId !== DEVNET.chainId) {
-      state.network = { chainId, ok: false, reason: `MetaMask is on chain ${parseInt(chainId, 16)}, not the devnet: press Add devnet to MetaMask.` };
+      state.network = { chainId, ok: false, reason: `MetaMask is on chain ${parseInt(chainId, 16)}, not the devnet: press Add devnet to Flask.` };
       return;
     }
     const genesis = state.tree?.genesis;
@@ -232,7 +235,7 @@ async function refreshEoaBalance() {
 
 async function addDevnet() {
   const p = need();
-  say("connect-result", "Approve the devnet in MetaMask…");
+  say("connect-result", "Approve the devnet in Flask…");
   await p.request({ method: "wallet_addEthereumChain", params: [DEVNET] });
   await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: DEVNET.chainId }] });
   await checkNetwork();
@@ -294,7 +297,7 @@ async function createAccount() {
     throw new Error("The Snap's winterlock_prepareAccount answer is not { factory, data, address, gas }.");
   }
   state.pendingAccount = prep.address;
-  say("account-result", "Confirm the createAccount transaction in MetaMask…");
+  say("account-result", "Confirm account creation in Flask…");
   const tx = { from: state.eoa, to: prep.factory, data: prep.data, ...(prep.gas ? { gas: prep.gas } : {}), ...(await devnetFees()) };
   const hash = await need().request({ method: "eth_sendTransaction", params: [tx] });
   say("account-result", "Creation sent, waiting for its block:", "info", txUrl(hash), short(hash, 10, 6));
@@ -322,7 +325,7 @@ async function fund() {
   const wei = parseEth($("fund-amount").value);
   if (wei <= 0n) throw new Error("The amount must be above 0.");
   await ensureDevnet();
-  say("account-result", `Confirm the ${formatEth(wei, 18)} transfer in MetaMask…`);
+  say("account-result", `Confirm the ${formatEth(wei, 18)} transfer in Flask…`);
   const hash = await need().request({ method: "eth_sendTransaction", params: [{ from: state.eoa, to: state.account, value: `0x${wei.toString(16)}`, gas: "0x186a0", ...(await devnetFees()) }] });
   say("account-result", "Funding sent, waiting for its block:", "info", txUrl(hash), short(hash, 10, 6));
   const receipt = await waitReceipt(hash, "The balance updates when it lands.");
@@ -337,8 +340,9 @@ async function send() {
   if (!isAddress(to)) throw new Error("To must be an address: 0x and 40 hex digits.");
   if (to.toLowerCase() === state.account.toLowerCase()) throw new Error("A send to the account itself is an admin call: pick another address.");
   const wei = parseEth($("send-amount").value);
-  say("send-result", "Confirm in MetaMask: the Snap's dialog names the leaf it will use…");
+  say("send-result", "Confirm in Flask: the Winterlock Snap names the leaf it will use…");
   const r = await invoke("winterlock_send", { to: to.toLowerCase(), valueWei: wei.toString() });
+  if (Number.isInteger(r?.leaf) && isTxHash(r?.txHash) && /^0x[0-9a-fA-F]+$/.test(String(r?.nonceKey))) latestPayment = { txHash: r.txHash, leaf: r.leaf, nonceKey: r.nonceKey };
   const href = safeHref(r?.explorerUrl) ?? (isTxHash(r?.txHash) ? txUrl(r.txHash) : null);
   const deadline = clock(r?.deadline);
   say("send-result", `Submitted on leaf ${r?.leaf}, nonce key ${r?.nonceKey}${deadline ? `, deadline ${deadline}` : ""}:`, "info", href, short(r?.txHash, 10, 6));
@@ -365,31 +369,30 @@ async function checkBundler() {
       ? { ok: true, text: `Bundler: running at ${BUNDLER}, ${Array.isArray(h.ops) ? h.ops.length : 0} user operation(s) so far` }
       : { ok: false, text: `Bundler at ${BUNDLER} is on chain ${h?.chainId}, not 1337` };
   } catch {
-    state.bundler = { ok: false, text: `Bundler: not running. Start it: cd bundler && bun src/main.ts` };
+    state.bundler = { ok: false, text: "Bundler: not running. Start it: cd bundler && bun src/main.ts" };
   }
 }
 
-/** Adds the Snap's account to MetaMask (MetaMask asks to confirm), then connects it to this page. */
+/** Adds the Snap's account to MetaMask (Flask asks to confirm), then connects it to this page. */
 async function addToMetaMask() {
   if (!state.account) throw new Error("Create the account first.");
   await ensureDevnet();
   if (!state.mmAdded) {
-    say("mm-result", "Confirm the new account in MetaMask…");
+    say("mm-result", "Confirm the new account in Flask…");
     await need().request({ method: "wallet_invokeKeyring", params: { snapId: SNAP_ID, request: { method: "keyring_createAccount", params: { options: {} } } } });
     await refreshStatus();
   }
-  say("mm-result", "In MetaMask, tick the Winterlock account (and keep your EOA) to connect it to this page…");
+  say("mm-result", "In Flask, edit the accounts, tick the Winterlock account (keep your funding account), then connect…");
   await need().request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
   const accounts = await need().request({ method: "eth_accounts" });
-  if (!accounts.some((a) => a.toLowerCase() === state.account.toLowerCase())) throw new Error("The Winterlock account is not connected to this page: press Add to MetaMask again and tick it.");
+  if (!accounts.some((a) => a.toLowerCase() === state.account.toLowerCase())) throw new Error("The Winterlock account is not connected to this page: press the button again and tick it.");
   state.eoa = pickEoa(accounts) ?? state.eoa;
   say("mm-result", `The Winterlock account ${short(state.account, 10, 6)} is a MetaMask account, connected here.`);
 }
 
 /**
- * A plain eth_sendTransaction from the Winterlock account. MetaMask's ERC-4337 path needs the fee fields from the page
- * (without them it refuses the send), so the page sets the devnet's 3 gwei tip and twice the base fee on top.
- * MetaMask answers once the bundler reports the transaction included.
+ * A plain eth_sendTransaction from the Winterlock account, with the fee fields (devnetFees). Flask asks the Snap to
+ * prepare and sign a user operation and posts it to the local bundler; it answers once the bundler reports inclusion.
  */
 async function sendFromMetaMask() {
   if (!state.account) throw new Error("Create the account first.");
@@ -405,7 +408,7 @@ async function sendFromMetaMask() {
   const from = accounts.find((a) => a.toLowerCase() === state.account.toLowerCase());
   if (!from) throw new Error("The Winterlock account is not connected to this page: press Add to MetaMask.");
   const tx = { from, to: to.toLowerCase(), value: `0x${wei.toString(16)}`, ...(await devnetFees()) };
-  say("mm-result", "Confirm in MetaMask. It then asks the Snap to sign one fresh leaf, and waits for the bundler's receipt…");
+  say("mm-result", "Confirm in Flask. It then asks the Snap to sign one fresh leaf, and waits for the bundler's receipt…");
   const hash = await need().request({ method: "eth_sendTransaction", params: [tx] });
   say("mm-result", "Included, sent from MetaMask:", "info", txUrl(hash), short(hash, 10, 6));
   await refreshStatus();
@@ -453,7 +456,7 @@ function render() {
   $("faucet").disabled = busy || !state.eoa;
   setText("eoa", state.eoa ?? "not connected");
   if (!state.eoa) setText("eoa-balance", "–");
-  else if (!net?.ok) setText("eoa-balance", "switch MetaMask to the devnet");
+  else if (!net?.ok) setText("eoa-balance", "switch Flask to the devnet");
   else setText("eoa-balance", formatEth(state.eoaBalanceWei), state.eoaBalanceWei === null ? undefined : formatEth(state.eoaBalanceWei, 18));
   setText("network", !net ? "–" : net.ok ? `${DEVNET.chainName} (chain 1337)` : net.reason);
   const t = state.tree;
@@ -481,7 +484,52 @@ function render() {
   $("mm-add").textContent = state.mmAdded ? "Connect to this page" : "Add to MetaMask";
   $("mm-send").disabled = busy || !state.account || !state.mmAdded || !state.bundler?.ok;
   setText("bundler", state.bundler?.text ?? "Bundler: –");
+  renderSetup(connected, busy);
   renderLanes();
+}
+
+// Presentation follows the existing connection/account state. It performs no wallet or network request.
+function renderSetup(connected, busy) {
+  const account = Boolean(state.account);
+  const balanceKnown = state.accountBalanceWei !== null && state.accountBalanceWei !== undefined;
+  const zeroBalance = account && balanceKnown && BigInt(state.accountBalanceWei) === 0n;
+  setText("connection-state", connected ? "Flask connected" : "Flask required");
+  setText("s2", account ? "Your Winterlock account" : "Create your account");
+  const active = !connected ? "connect" : !account ? "account" : "send";
+  for (const phase of document.querySelectorAll("[data-phase]")) {
+    const name = phase.dataset.phase;
+    phase.classList.toggle("active", name === active);
+    phase.classList.toggle("done", name === "connect" ? connected : name === "account" ? account : false);
+    if (name === active) phase.setAttribute("aria-current", "step"); else phase.removeAttribute("aria-current");
+  }
+  const labels = {
+    connect: ["connect", connected ? "Reconnect Flask" : "Connect Flask", "Connecting to Flask…"],
+    create: ["create", "Create account using Flask", "Preparing account…"],
+    fund: ["fund", "Fund from Flask", "Funding account…"],
+    send: ["send", "Send with Winterlock Snap", "Submitting payment…"],
+    faucet: ["faucet", "Get 1 test ETH", "Requesting test ETH…"],
+    network: ["add-devnet", "Add devnet to Flask", "Setting up devnet…"],
+  };
+  for (const [kind, [id, idle, working]] of Object.entries(labels)) {
+    const button = $(id);
+    button.textContent = state.busy === kind ? working : idle;
+    if (state.busy === kind) button.setAttribute("aria-busy", "true"); else button.removeAttribute("aria-busy");
+  }
+  if (zeroBalance) $("send").disabled = true;
+  setText("send-readiness", !account ? "Create and fund your Winterlock account before sending." : zeroBalance ? "Add ETH from Flask to cover your payment and transaction fees." : !balanceKnown ? "Balance unavailable. Review the funds and fees in Flask before confirming." : "Ready to send. The Winterlock Snap signs this payment.");
+  $("send-readiness").classList.toggle("ready", account && balanceKnown && !zeroBalance && !busy);
+  const current = state.leaves.find((l) => l.txHash === latestPayment?.txHash)
+    ?? (!latestPayment ? state.leaves.find((l) => l.status === "submitted") : null);
+  const shown = current ?? latestPayment;
+  if (shown) {
+    const status = current?.status ?? "submitted";
+    const stateKey = status === "onchain" ? "included" : status === "burned" ? "refused" : "admitted";
+    const heading = status === "onchain" ? "Lane included" : status === "burned" ? "Ticket burned" : status === "reserved" ? "Signing in the Snap" : "Payment pending";
+    const href = safeHref(current?.explorerUrl) ?? (isTxHash(shown.txHash) ? txUrl(shown.txHash) : null);
+    drawActivity($("snap-activity"), { state: stateKey, heading, leaf: shown.leaf, lane: String(shown.nonceKey ?? "—"),
+      steps: status === "onchain" ? ["Submitted", "Included"] : status === "burned" ? ["Burned"] : status === "reserved" ? ["Signing"] : ["Submitted", "Pending"],
+      note: current?.note ? String(current.note) : undefined, href: href ?? undefined });
+  } else drawActivity($("snap-activity"), null);
 }
 
 function renderLanes() {
