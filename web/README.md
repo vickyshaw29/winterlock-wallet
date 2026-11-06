@@ -125,7 +125,7 @@ The fake RPC does not execute the EVM. Live devnet acceptance remains a separate
 
 The original shared API/helpers were written with Claude Code for Vicky; they were moved into `src/domain/` without
 changing transaction behavior. The retired frontends were also written with Claude Code. The React migration, production
-styles, Vite/proxy integration, browser checks and this documentation were written with Codex (OpenAI), directed by Vicky.
+styles, Vite/proxy integration, browser checks and this documentation were written with OpenAI coding assistant, directed by Vicky.
 The shadcn/ui Button, Input and Dialog sources were adapted from its Base UI registry; their MIT notice is retained in
 `src/components/ui/LICENSE.md`. Font licences remain beside their upstream assets. See the root README for file-level
 AI attribution. Design-only artifacts remain outside tracked source.

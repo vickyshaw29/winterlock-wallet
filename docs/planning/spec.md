@@ -4,7 +4,7 @@ Nov 1, 2026 · @Yash Sharma
 
 Build spec for the ETHGlobal Mumbai 2026 submission to the Ethereum Foundation "Best use of the Frame Transaction Alternative Mempool" track. Written for Vicky and for any reviewer, human or AI. Every protocol constant here was read from the EIP text or the alt mempool docs on 2026-11-01; items marked VERIFY are unconfirmed on the hackathon devnets.
 
-**Revised 2026-11-03** after a four-reviewer audit (two Claude Fable agents, two Codex gpt-6-astra agents) whose claims were re-verified against the EIP texts, the ERC-8421 draft, the sidecar and ethrex sources, the ETHGlobal rules and the prize page. Hash-signed transactions are now keyed-only, the budget story is corrected, and the section "Review findings and devnet facts" records what changed and why.
+**Revised 2026-11-03** after a four-reviewer audit (two Claude Fable agents, two OpenAI coding assistant gpt-6-astra agents) whose claims were re-verified against the EIP texts, the ERC-8421 draft, the sidecar and ethrex sources, the ETHGlobal rules and the prize page. Hash-signed transactions are now keyed-only, the budget story is corrected, and the section "Review findings and devnet facts" records what changed and why.
 
 Review findings, devnet facts and judge Q&A: Review findings (Nov 3)
 

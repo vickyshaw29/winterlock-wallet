@@ -12,7 +12,7 @@ them.
 | [plan.md](plan.md) | The build plan, written Nov 4, before the event: who builds what, when, and the event rules |
 | [rules-AGENTS.md](rules-AGENTS.md) | `AGENTS.md`, the rules every AI agent in the repository followed. Copied verbatim and renamed, so that no coding agent loads the copy as live instructions |
 | [rules-CLAUDE.md](rules-CLAUDE.md) | `.claude/CLAUDE.md`, which loads those rules, the spec and the plan into every Claude Code session. Copied verbatim and renamed for the same reason |
-| [handoffs/](handoffs/) | Handoff notes between AI sessions during the event, each dated in its first line, and the brief for the UI redesign (`handoff-codex-ui.md`) |
+| [handoffs/](handoffs/) | Handoff notes between AI sessions during the event, each dated in its first line, and the brief for the UI redesign (`handoff-ui.md`) |
 | [briefs/](briefs/) | Build briefs for the backend, its fixes, the fake chain, the parallel-lanes tooling, the screens and their Ledger restyle, each approved by Vicky as its header says; and `README-draft.md`, the README's first draft, with its notes to Vicky at the top |
 | [research/](research/) | `hotlanes-design.md`, a read-only study of how to build parallel lanes on the alt mempool (Nov 6), and `hotlanes-critique.md`, a review that corrected it |
 | [ui-directions/](ui-directions/) | The three UI directions offered on Nov 6: 1 Ledger, 2 Operations, 3 Key tree, each a page and its notes. Vicky picked 1, Ledger (`briefs/ledger-build.md`) |

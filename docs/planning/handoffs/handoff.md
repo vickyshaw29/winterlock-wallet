@@ -161,7 +161,7 @@ Feature freeze **Sat Nov 7, 01:00 IST**. Submission **Sat 08:30 IST** (Vicky sub
   new wallets' owner is the EOA, funding tops up to WL_FUND_WEI, an Unknown rotation re-checked every 30 s, scripts
   refuse rotated records, a lost device journal is never recreated (409 device_unusable), the first ticket cut starts at
   the lowest free hot leaf.
-- UI: built by Claude here (not Codex), Ledger direction, the spec's screen design rules relaxed, fonts self-hosted.
+- UI: built by Claude here (not the OpenAI assistant), Ledger direction, the spec's screen design rules relaxed, fonts self-hosted.
 - LAN mode: built, hotspot only.
 - Composable pipeline: a separate fresh session.
 

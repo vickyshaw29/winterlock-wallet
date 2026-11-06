@@ -1,6 +1,6 @@
-# Handoff to Codex: redesign Winterlock's three screens (Fri Nov 6, ~16:15 IST)
+# Handoff to OpenAI coding assistant: redesign Winterlock's three screens (Fri Nov 6, ~16:15 IST)
 
-Local file, never committed. Written by Claude Code for Vicky, who will run Codex with it.
+Local file, never committed. Written by Claude Code for Vicky, who will run OpenAI coding assistant with it.
 
 ## Your role
 
@@ -248,9 +248,9 @@ account 3, written up with every hash in `README-draft.md` sections 6.4 to 6.8, 
    does not serve the story, fix. Shoot a Play scene in progress on the fake stack, so the moments are seen working.
 4. **Run the tests,** then update `web/README.md`.
 5. **AI attribution** (hackathon rule, plan section 1). In `/Users/vicky/Documents/winterlock-backend/README.md`,
-   section "AI attribution", add a line naming the files you wrote or redesigned: "written with Codex (OpenAI), driven
+   section "AI attribution", add a line naming the files you wrote or redesigned: "written with OpenAI coding assistant, driven
    and reviewed by Vicky". Only add: never delete or reword the existing Claude Code lines. If you substantially
-   rewrite a file that a Claude Code line names, name it in your Codex line as "redesigned with Codex" and leave the
+   rewrite a file that a Claude Code line names, name it in your OpenAI-assistance line as "redesigned with OpenAI coding assistant" and leave the
    Claude line as it is. Fonts stay under "Not written by us".
 
 ## Rules
