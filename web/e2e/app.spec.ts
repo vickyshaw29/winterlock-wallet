@@ -111,7 +111,11 @@ test("inline cap validation, presets and cold offline separation", async ({
   await expect(page.locator("#pay-amount")).toHaveValue("0.001");
   await page.getByLabel("Offline", { exact: true }).check();
   await expect(
-    page.getByRole("button", { name: "Cut tickets", exact: true }),
+    page.getByRole("button", {
+      name: "Cut tickets",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(page.locator("#pay")).toBeEnabled();
 });
@@ -386,7 +390,11 @@ test("lost-device response disables hot signing and cutting immediately, then re
   await expect(page.locator("#phone-pane")).toContainText("recover it");
   await expect(page.locator("#pay")).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: "Cut tickets", exact: true }),
+    page.getByRole("button", {
+      name: "Cut tickets",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   broken = false;
   await page.unroute(`**/api/wallets/${wallet}/send`);

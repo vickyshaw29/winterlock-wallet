@@ -78,7 +78,6 @@ export function WalletsPage() {
       <Intro
         title="Your wallets"
         description="Create a post-quantum account or continue with an existing wallet."
-        mempool={false}
       />
       <div className="panes start">
         <section className="pane" aria-labelledby="wallets-title">

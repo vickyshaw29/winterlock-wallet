@@ -307,7 +307,9 @@ export function HotColdPage() {
                 aria-label="Latest payment"
               >
                 <span className="activity-label">Latest payment</span>
-                <strong>{statusOf(latest).label}</strong>
+                <strong className="pill" data-state={statusOf(latest).key}>
+                  {statusOf(latest).label}
+                </strong>
                 <span className="hint">
                   Leaf {latest.leaf} · {shortHex(latest.txHash)}
                 </span>

@@ -1,258 +1,35 @@
-/* Approved Winterlock design, compiled with Tailwind. */
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./styles/style.css";
-@import "./styles/index.css";
-@import "./styles/hot-cold.css";
-@import "./styles/agent.css";
-@import "./styles/session.css";
-@import "./styles/viewport.css";
+@import "./styles/theme.css";
+@import "./styles/base.css";
+@import "./styles/shell.css";
+@import "./styles/components.css";
+@import "./styles/pages.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 @theme inline {
-  --color-background: var(--ledger);
+  --color-background: var(--bg);
   --color-foreground: var(--ink);
-  --color-card: var(--stock);
+  --color-card: var(--surface);
   --color-card-foreground: var(--ink);
-  --color-popover: var(--stock);
+  --color-popover: var(--surface);
   --color-popover-foreground: var(--ink);
-  --color-primary: var(--accent);
-  --color-primary-foreground: var(--on-accent);
-  --color-secondary: var(--soft-accent);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--on-ink);
+  --color-secondary: var(--sunk);
   --color-secondary-foreground: var(--ink);
-  --color-muted: var(--ledger);
-  --color-muted-foreground: var(--print);
-  --color-accent: var(--soft-accent);
+  --color-muted: var(--sunk);
+  --color-muted-foreground: var(--ink-3);
+  --color-accent: var(--sunk);
   --color-accent-foreground: var(--ink);
-  --color-destructive: var(--danger);
+  --color-destructive: var(--bad);
   --color-border: var(--rule);
   --color-input: var(--rule);
-  --color-ring: var(--accent);
+  --color-ring: var(--cold);
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --font-sans: "Manrope", sans-serif;
-  --font-mono: "IBM Plex Mono", monospace;
-}
-
-#root {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-}
-.react-workspace {
-  flex: 1;
-}
-.react-workspace .btn svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-.react-workspace .btn[data-pending] {
-  cursor: progress;
-}
-.field-error {
-  color: var(--danger);
-  font-size: 13px;
-  line-height: 20px;
-}
-.field-help {
-  color: var(--print);
-  font-size: 12px;
-  line-height: 20px;
-}
-.content-error {
-  display: grid;
-  gap: 12px;
-  padding: 24px;
-  border: 1px solid var(--rule);
-  border-radius: 16px;
-  background: var(--stock);
-}
-.react-workspace .workspace-tabs {
-  width: 100%;
-}
-.react-workspace .lane-inspector {
-  margin: 0;
-  padding: 16px;
-}
-.react-workspace .lane-inspector > h3 {
-  margin-bottom: 12px;
-}
-.react-workspace .raw-json {
-  max-height: 220px;
-  overflow: auto;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--ledger);
-  font: 12px/20px var(--mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.react-workspace .empty-state {
-  padding: 28px 4px;
-  color: var(--print);
-  font-size: 13px;
-}
-.react-workspace .dialog-surface {
-  background: var(--stock);
-  color: var(--ink);
-  border-color: var(--rule);
-}
-.react-workspace .focus-target:focus {
-  outline: none;
-}
-.wallet-choice {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.wallet-choice select {
-  min-height: 44px;
-  font-size: 13px;
-}
-.key-budget {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  list-style: none;
-  padding: 0;
-}
-.key-budget li {
-  flex: 1;
-  min-width: 8px;
-  height: 6px;
-  border-radius: 2px;
-  background: var(--ticket-rule);
-}
-.key-budget li[data-state="next"] {
-  background: var(--accent);
-}
-.key-budget li[data-state="onchain"] {
-  background: var(--stamp);
-}
-.key-budget li[data-state="burned"] {
-  border: 1px solid var(--danger);
-  background: var(--stock);
-}
-.key-budget li[data-state="flight"] {
-  border: 1px dashed var(--ink);
-  background: var(--stock);
-}
-.query-stale {
-  color: var(--danger);
-  font-size: 12px;
-}
-.app-dialog {
-  width: min(560px, calc(100vw - 32px));
-  max-width: none;
-  max-height: calc(100dvh - 48px);
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--rule);
-  padding: 24px;
-  border-radius: 20px;
-  background: var(--stock);
-  color: var(--ink);
-  box-shadow: 0 20px 80px rgb(10 20 50 / 0.2);
-}
-.app-dialog [data-slot="dialog-title"] {
-  padding-right: 30px;
-  font: 700 20px/28px var(--sans);
-  letter-spacing: -0.025em;
-}
-.app-dialog .btn svg {
-  width: 16px;
-  height: 16px;
-}
-.app-dialog p,
-.app-dialog dd {
-  overflow-wrap: anywhere;
-}
-.app-dialog .raw-json {
-  max-height: 240px;
-  overflow: auto;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--ledger);
-  font: 12px/20px var(--mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.lane-dialog {
-  width: min(860px, calc(100vw - 32px));
-}
-.lane-dialog .lane-inspector {
-  padding: 0;
-}
-.lane-dialog .checks {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-.lane-dialog .check-fail {
-  color: var(--danger);
-}
-.lane-dialog .raw-timeline {
-  padding-left: 20px;
-  font-size: 12px;
-}
-.lane-dialog .facts,
-.lane-dialog .gas-columns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-.lane-dialog .gas-columns dd {
-  font-size: 16px;
-}
-.agent-panes .log {
-  max-height: 320px;
-}
-.live-activity {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-}
-.live-activity strong {
-  font-size: 13px;
-}
-.activity-label {
-  color: var(--print);
-  font-size: 12px;
-}
-.cell[data-state="unknown"] .hole {
-  border: 2px dashed var(--print);
-}
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-@media (min-width: 1000px) {
-  #root > main {
-    flex: 1;
-  }
-  .react-workspace .workspace-tabs {
-    display: none;
-  }
-}
-
-.plan h3 {
-  font-size: 13px;
-  line-height: 21px;
-}
-
-.field > label {
-  color: var(--print);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 20px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
 }

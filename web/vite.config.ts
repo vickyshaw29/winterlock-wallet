@@ -135,8 +135,8 @@ export default defineConfig({
       name: "winterlock-licenses",
       generateBundle() {
         for (const [source, name] of [
-          ["src/styles/fonts/OFL-Manrope.txt", "OFL-Manrope.txt"],
-          ["src/styles/fonts/OFL-IBMPlexMono.txt", "OFL-IBMPlexMono.txt"],
+          ["node_modules/@fontsource/ibm-plex-sans/LICENSE", "OFL-IBMPlexSans.txt"],
+          ["node_modules/@fontsource/ibm-plex-mono/LICENSE", "OFL-IBMPlexMono.txt"],
           ["src/components/ui/LICENSE.md", "shadcn-ui.txt"],
         ] as const)
           this.emitFile({
