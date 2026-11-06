@@ -1,18 +1,20 @@
-# Noncebound
+# Winterlock
 
-Noncebound is a post-quantum smart account for EIP-8141 frame transactions. Every payment is signed with a
-one-time hash-based key (WOTS+, under a Merkle tree), and that key's number is the payment's own EIP-8250 nonce key.
-The protocol consumes the nonce key in the same step that approves the payment, so it retires the key too. The account
-never records which keys it has used: no bitmap, no counter, no storage write during validation.
+**A post-quantum smart account whose one-time keys are retired by the protocol itself.**
+
+Every payment is signed with a one-time hash-based key (WOTS+, under a Merkle tree), and that key's number is the
+payment's own EIP-8250 nonce key. The protocol consumes the nonce key in the same step that approves the payment, so it
+retires the key too. The account never records which keys it has used: no bitmap, no counter, no storage write during
+validation.
 
 Because every payment has its own nonce key, one account can have many hash-signed payments pending at once on the
-ERC-8421 alternative mempool. The public mempool holds one per sender.
+ERC-8421 alternative mempool, where the public mempool holds one per sender. And it sends from MetaMask Flask: a Snap
+makes the account a MetaMask account, and a local bundler carries its frame transactions to the alt mempool.
 
-Built at ETHGlobal Mumbai 2026 for the Ethereum Foundation's *Best use of the Frame Transaction Alternative Mempool*
-prize, and run on that prize's devnet (chain 1337). [What was submitted](#ethglobal-mumbai-2026).
-
-Its working name was Winterlock, which the repository, packages and paths still use. It is not the Safe forum's
-Winterlock proposal, which is different work ([note](#prior-art)).
+Built at ETHGlobal Mumbai 2026 for the Ethereum Foundation's
+[*Best use of the Frame Transaction Alternative Mempool*](https://ethglobal.com/events/mumbai/prizes/ethereum-foundation)
+prize, and run on that prize's devnet (chain 1337). [What was submitted](#ethglobal-mumbai-2026). Not to be confused
+with the Safe forum's Winterlock proposal, which is different work ([note](#prior-art)).
 
 ```
 $ cd pipeline && WL_GATEWAY_URL=https://altmempool.forshtat.com/rpc bun scripts/hashsig-devnet.ts
@@ -30,13 +32,13 @@ account 0xf3e63d269dae09032ea950cd9722733e9b3f2d37 (real verifier), 0.2 ETH
    OK a valid signature of leaf A under leaf B's nonce key     sig: hash-based check
 ```
 
-**[Measured](#measured)** · [Real and not](#what-is-real-and-what-is-not) · [Quickstart](#quickstart) ·
-[How it works](#how-it-works) · [Where to look](#where-to-look-in-the-code) · [Design](#design) ·
-[Parallel lanes](#parallel-lanes-on-the-alt-mempool) · [Gas](#gas) · [Devnet evidence](#devnet-evidence) ·
-[Trade-offs](#trade-offs) · [Prior art](#prior-art) · [CROPS](#crops) · [ETHGlobal](#ethglobal-mumbai-2026) ·
-[Limitations](#known-limitations) · [Authorship](#authorship-and-ai-use)
+**[Measured](#measured)** · [Quickstart](#quickstart) · [How it works](#how-it-works) ·
+[From MetaMask](#send-from-metamask) · [Deployed](#deployed-on-the-devnet) · [Design](#design) · [Gas](#gas) ·
+[Parallel lanes](#parallel-lanes) · [Evidence](#devnet-evidence) · [Trade-offs](#trade-offs) ·
+[Prior art](#prior-art) · [CROPS](#crops) · [ETHGlobal](#ethglobal-mumbai-2026) · [Limitations](#known-limitations) ·
+[Authorship](#authorship-and-ai-use)
 
-## Why it matters
+## Why use it
 
 - **The protocol keeps the record of used keys.** Leaf *i* signs only a transaction whose nonce key is *i*, at
   sequence 0 (`account/yul/Account.yul:54-61`). EIP-8250 marks that key used when the payment is approved, so a second
@@ -59,7 +61,11 @@ account 0xf3e63d269dae09032ea950cd9722733e9b3f2d37 (real verifier), 0.2 ETH
 - **It fits the 100,000-gas verification cap** that the devnet enforces on every transaction. The signer nudges the
   fee until the message needs few enough hash steps, then signs once: 88,373 gas used of 90,000 declared, at 510 steps.
 - **The chain's own verifier refuses forgeries**, including a valid signature of leaf A sent under leaf B's nonce key.
-- **Three implementations agree, and 729 tests run offline.** The Rust signer's test vectors pass the TypeScript
+- **It sends from MetaMask.** MetaMask cannot build a frame transaction, but MetaMask Flask can send an ERC-4337 user
+  operation for an Account Snap's account. The Winterlock Snap is that account, and the local bundler unwraps the signed
+  frame transaction it carries: MetaMask's own confirmation screen, a fresh one-time key per payment, a frame
+  transaction on chain. Nothing on chain is ERC-4337.
+- **Three implementations agree, and 761 tests run offline.** The Rust signer's test vectors pass the TypeScript
   verifier; the TypeScript signer's vectors pass the Yul verifier and Quip Network's audited `WOTSPlus.sol`, used as an
   oracle for the signature format.
 
@@ -90,6 +96,7 @@ account 0xf3e63d269dae09032ea950cd9722733e9b3f2d37 (real verifier), 0.2 ETH
 | Parallel lanes, the public mempool's refusal, expiry and retry | Real, on the devnet's alt mempool and node, with hashes |
 | Hot tickets and their refusals | Real: ticket files from the Rust CLI, caps checked by the account |
 | The backend and the three screens | Real: they send real transactions; the screens show only the backend's records |
+| Sending from MetaMask Flask | Real: the Snap signs, the local bundler sends; two MetaMask sends landed on the devnet. Flask only (MetaMask's ERC-4337 path is not in regular MetaMask) |
 | The agent screen's market price | **A mock**, labelled so on screen; it only decides when the agent fires |
 | `fakechain/` | **A fake devnet** for tests and practice, chain 31337, marked FAKE CHAIN; it runs no EVM code and is never evidence |
 | Hybrid ECDSA co-signature | Built in the account, **off**, refused by the backend |
@@ -110,10 +117,11 @@ account 0xf3e63d269dae09032ea950cd9722733e9b3f2d37 (real verifier), 0.2 ETH
 | Lanes after a rotation (epoch 1) | 8 of 8 landed, blocks 2,660 and 2,662 | the three screens, run on the devnet |
 | Signature entry | 2,594 bytes: 2,144 WOTS+, 448 Merkle path, 2 header | `Account.yul:77` |
 | Calldata floor of one transfer | 166,720 gas, which is 2,605 billed bytes × 64 | computed with ethrex's billing, matches every receipt |
-| Tests, offline, all passing | 729: 677 TypeScript (pipeline 271, web 189, backend 115, fake chain 90, demo 12), 25 Foundry, 27 Rust | `main` at `2542891`, Nov 6, 17:00 IST |
+| Sent from MetaMask Flask | **2 of 2** landed, about 25 s after confirming; a Snap-dialog send landed too | blocks 5,703, 5,808 and 5,898 |
+| Tests, offline, all passing | **761**: 698 TypeScript (pipeline 288, web 189, backend 115, fake chain 90, demo 12, bundler 4), 11 in MetaMask's Snap simulator, 25 Foundry, 27 Rust | `main` at `98014fe`, Nov 6, 22:45 IST |
 
 Every figure comes from a receipt, a node simulation or a test run on the devnet below, on Nov 5 and 6, 2026, and
-every transaction is listed with its hash in [Devnet evidence](#devnet-evidence). A figure worked out from a formula
+every transaction is listed with its hash in [docs/devnet-evidence.md](docs/devnet-evidence.md). A figure worked out from a formula
 says *computed*.
 
 ## Quickstart
@@ -161,11 +169,21 @@ export WL_GATEWAY_URL=https://altmempool.forshtat.com/rpc       # the miner's si
 ```
 
 Fire a burst when the last three blocks hold no public-mempool transaction, and send nothing to the public mempool
-while alt lanes are pending ([why](#parallel-lanes-and-the-stuck-payment)). The three screens, `hot-cold.html`,
+while alt lanes are pending ([why](docs/devnet-evidence.md#parallel-lanes-and-the-stuck-payment)). The three screens, `hot-cold.html`,
 `agent.html` and `session.html`, each have a Play scene button that runs their story, and a Mempool switch between alt
-and public. Seeds, journals and keys live in
-`~/.winterlock`, never in the repository. The working name of the project was Winterlock, so packages, paths and
-variables still say `winterlock` and `WL_`.
+and public. Seeds, journals and keys live in `~/.winterlock`, never in the repository.
+
+**4. From MetaMask Flask**, on the devnet. Install [MetaMask Flask](https://docs.metamask.io/snaps/get-started/install-flask/):
+local Snaps and MetaMask's ERC-4337 path run in Flask only.
+
+```sh
+(cd pipeline && bun install && bun run build)          # the core the Snap bundles
+(cd bundler && bun install && bun src/main.ts)          # http://127.0.0.1:15192/rpc, holds no key
+(cd snap && bun install && npm run serve)               # the Snap, local:http://localhost:15191
+(cd snap && bun site/serve.ts)                          # http://localhost:15190
+```
+
+On the page: connect Flask, create and fund the account, press **Add to MetaMask**, then **Send from MetaMask**.
 
 ## How it works
 
@@ -188,18 +206,63 @@ Think of a cheque book.
   still shows the key unused, the payment can never land (`waitForInclusion` in `pipeline/src/submit.ts`). The wallet
   marks that cheque burned and pays again with the next one, on a new nonce key: a new lane.
 - **Many cheques can be in flight at once.** Every payment has its own key, and the devnet's alt mempool holds one
-  pending transaction per key, with no cap per account ([Parallel lanes](#parallel-lanes-on-the-alt-mempool)).
+  pending transaction per key, with no cap per account ([Parallel lanes](#parallel-lanes)).
 
 ```
  web/ ──HTTP──▶ backend/ ──▶ pipeline/ ─── alt ───▶ ERC-8421 sidecar ──▶ ethrex node ──▶ account/
  three screens  seeds,       build, grind,            (miner's)             (devnet)       Yul verify frame
                 journals     sign, send,  ─ public ─────────────────────────▶               behind an
-                   │         follow                                                         EIP-1167 proxy
-                   └──▶ signer/  Rust CLI: ticket files, signing from a ticket
+                   │         follow                    ▲                                    EIP-1167 proxy
+                   └──▶ signer/  Rust CLI              │
+                                                       │
+ MetaMask Flask ──user op──▶ bundler/ ─────────────────┘
+      ▲   │                  unwraps the signed frame tx, checks it, follows it
+      │   └─prepare, sign──▶ snap/  the account's seed and journal, inside MetaMask
 ```
 
 The backend is the only process that holds seeds and journals, and it listens on 127.0.0.1 only. The pipeline is a
-library with no HTTP; it also builds for a browser or a MetaMask Snap ([below](#using-the-pipeline-in-a-browser-or-a-snap)).
+library with no HTTP; it also builds for a browser or a MetaMask Snap ([docs/design.md](docs/design.md#using-the-pipeline-in-a-browser-or-a-snap)).
+
+## Send from MetaMask
+
+MetaMask cannot build a frame transaction, but MetaMask Flask can send an ERC-4337 user operation for an account an
+Account Snap holds, to the bundler URL the Snap names. So the Winterlock Snap (`snap/`) is also an Account Snap whose one
+account, type `eip155:erc4337`, is the Winterlock account, and a local bundler (`bundler/`) unwraps what MetaMask sends.
+Nothing on chain is ERC-4337: there is no EntryPoint and no bundle. The user operation is only the envelope.
+
+1. A page calls `eth_sendTransaction` from the Winterlock account, with the fee fields (MetaMask's 4337 path refuses a
+   send without them, and Flask cannot estimate fees on chain 1337).
+2. MetaMask asks the Snap to prepare: the Snap reserves a fresh leaf whose key is unused on chain and answers with
+   `nonce = nonceKey << 64` (an ERC-4337 nonce is a 192-bit key and a 64-bit sequence; ours is key and 0), the call
+   list as `callData`, gas limits that sum to an upper bound of the transaction's gas limit, and
+   `bundlerUrl = http://127.0.0.1:15192/rpc`.
+3. The user confirms in MetaMask's own screen. MetaMask asks the Snap to sign. The Snap signs only the user operation
+   it prepared, at the user's fees, once per leaf (a second request for the same leaf is refused), after the tip floor,
+   base fee and balance checks; it records the leaf "submitted" before the signature leaves the Snap. The signature
+   field carries the whole signed frame transaction.
+4. MetaMask posts the user operation to the bundler, which holds no key. `checkUserOpTx` (`pipeline/src/userop.ts`), run
+   by the Snap before signing and by the bundler before sending, ties every frame, fee and limit of the transaction to
+   the user operation: nothing that pays anyone else, more, or at another fee is ever sent. The bundler refuses a second
+   transaction on a nonce key it already carries, sends to the alt mempool, follows the key on chain, and reports
+   `success: false` only for Expired or Reverted, never for an included transaction.
+
+Two sends from MetaMask landed on the devnet, each about 25 s after confirming ([evidence](docs/devnet-evidence.md#sending-from-metamask-and-the-scenes-run-again-nov-6-evening)). How to run it: [Quickstart, step 4](#quickstart).
+
+## Deployed on the devnet
+
+Chain 1337, the prize's devnet: node `https://altmempool.forshtat.com`, the miner's sidecar
+`https://altmempool.forshtat.com/rpc`, explorer `https://explorer.altmempool.wtf`.
+
+| What | Address |
+| --- | --- |
+| Account implementation (the Yul verify frame) | [`0x13075a0f56d6a793eba4493d866e6502052abe87`](https://explorer.altmempool.wtf/address/0x13075a0f56d6a793eba4493d866e6502052abe87) |
+| Factory (`createAccount`, CREATE2 of a 45-byte EIP-1167 proxy) | [`0xe7227c802ea370f04ae533827041c89dc5a4e659`](https://explorer.altmempool.wtf/address/0xe7227c802ea370f04ae533827041c89dc5a4e659) |
+| Account 3, which sent the qualifying transaction | [`0xf3e63d269dae09032ea950cd9722733e9b3f2d37`](https://explorer.altmempool.wtf/address/0xf3e63d269dae09032ea950cd9722733e9b3f2d37) |
+| The MetaMask account, made by the Snap | [`0xf2fde1b5c10069c0300ff21773ef102565b7b790`](https://explorer.altmempool.wtf/address/0xf2fde1b5c10069c0300ff21773ef102565b7b790) |
+| The devnet's EIP-8250 nonce manager | [`0x0000000000000000000000000000000000008250`](https://explorer.altmempool.wtf/address/0x0000000000000000000000000000000000008250) |
+| The devnet's expiry verifier | [`0x0000000000000000000000000000000000008141`](https://explorer.altmempool.wtf/address/0x0000000000000000000000000000000000008141) |
+
+Every other account and contract, with the blocks they were made in: [docs/devnet-evidence.md](docs/devnet-evidence.md#accounts-and-contracts).
 
 ## Where to look in the code
 
@@ -219,10 +282,12 @@ library with no HTTP; it also builds for a browser or a MetaMask Snap ([below](#
 | Ticket files: cut, exported first, signed on the device | `pipeline/src/tickets.ts`; `signer export-leaves`, `signer sign --ticket-file` |
 | Lanes: what one holds of the balance, the plan for N | `pipeline/src/lanes.ts`; `demo/lanes.ts` |
 | The backend's API | `backend/src/app.ts`, `backend/src/backend.ts`, `backend/README.md` |
+| A frame transaction carried as a user operation, and the check both ends run | `checkUserOpTx` in `pipeline/src/userop.ts` |
+| A leaf reserved at prepare signs once, recorded before anyone sees it | `signPrepared` in `pipeline/src/submit.ts` |
+| The MetaMask account: prepare, sign, who may call | the keyring section of `snap/src/index.tsx` |
+| The bundler that holds no key | `bundler/src/bundler.ts` |
 
 ## Design
-
-### Keyed only
 
 Every hash-signed transaction carries exactly one nonce key at sequence 0. The verify frame refuses everything else:
 another key count (`Account.yul:55`), the legacy key 0 (`:57`), a non-zero sequence (`:58`), another epoch (`:59`), a
@@ -239,7 +304,7 @@ verify frame refuses. Creating an account from the EOA measured 953,678 gas, wit
 
 The account is a 45-byte EIP-1167 proxy to one implementation, a standalone Yul object (`account/yul/Account.yul`). The
 EIP-8141 opcodes are emitted with `verbatim` (`Account.yul:37-41`). Their operand orders come from the ethrex source at
-the devnet's commit, and were confirmed on chain ([Day-0 results](#day-0-results)). `account/scripts/build.sh` splices the
+the devnet's commit, and were confirmed on chain ([Day-0 results](docs/devnet-evidence.md#day-0-results)). `account/scripts/build.sh` splices the
 verifier `account/yul/hashsig/HashSigVerify.yul` in at `Account.yul:118` and compiles with solc 0.8.38
 `--strict-assembly --optimize`.
 
@@ -252,26 +317,6 @@ verifier `account/yul/hashsig/HashSigVerify.yul` in at `Account.yul:118` and com
 | 5 to 8. Hash-based check | WOTS+ over the sig hash (TXPARAM 0x08), then the Merkle path to the stored root, with CHAINID hashed into the leaf | `:84-88`; `HashSigVerify.yul:15-30` |
 | 9. Hot policy | Only for hot leaves ([Hot tickets](#hot-tickets)) | `:90-91`, `:98-116` |
 | 10. Approve | APPROVE with scope 0x3, execution and payment. Here the protocol consumes the nonce key | `:93-95` |
-
-Inside the hash-based check (`account/yul/hashsig/HashSigVerify.yul`):
-
-- index = (slot << h) | leaf (`:23`); per-leaf public seed P = keccak256(treeSeed ‖ uint32(index)) (`:32-36`).
-- 15 randomization elements r_k = keccak256(0x03 ‖ P ‖ uint16(k)), k = 1 to 15, as in Quip's `WOTSPlus.sol` (`:39-46`).
-- 64 message digits plus 3 checksum digits; each chain runs 15 − digit steps of keccak256(x XOR r) (`:50-68`). The step
-  loop is unrolled by the bits of the step count (`:74-102`). This is where the gas goes.
-- leaf node = keccak256(P ‖ uint256(chainId) ‖ pkHash) (`:104-109`); h + 4 path hashes up to the root (`:111-120`).
-
-Every refusal reverts with a 32-byte ASCII reason (`Account.yul:240`), such as `nonce: epoch` or `hot: value cap`. The
-node's simulation returns it as `revertData`, so a refused transaction names the rule it broke.
-
-What the verify frame reads, and why each read is allowed in a static frame: its own storage, TXPARAM, FRAMEPARAM,
-SIGPARAM, SIGDATACOPY, CHAINID and memory. The verify path uses no TIMESTAMP, NUMBER, BALANCE, GAS or SSTORE, and
-makes no CALL. The compiled implementation contains no ORIGIN, TLOAD, TSTORE, CALLCODE, BLOBHASH or SELFDESTRUCT. The
-proxy's GAS right before its DELEGATECALL passes the devnet's tracer.
-
-The signature entry is 2,594 bytes at h = 10: version (1) ‖ chain slot (1) ‖ WOTS+ signature (67 × 32 = 2,144) ‖ path
-(14 × 32 = 448). It travels in the transaction's own signature list as scheme ARBITRARY, which costs 100 gas toward the
-prefix cap. The leaf index is not in the entry: it comes from the nonce key.
 
 ### Hot tickets
 
@@ -292,107 +337,7 @@ Hot tickets carry no ECDSA entry (`:66`). A stolen hot device can spend at most 
 fee cap), to one address. `setHotPolicy` may keep or lower hotStart, never raise it (`:167`): raising it would turn
 exported tickets into cold leaves, which have no caps.
 
-### Hybrid co-signature: off
-
-The account can require an owner ECDSA signature beside the hash-based one (`Account.yul:66-72`): scheme SECP256K1,
-empty msg (so it signs the canonical hash, not just any digest), signer equal to the stored owner. It is off
-(`hybridRequired = 0`), and the backend refuses to create a hybrid wallet. Turning it on costs 2,800 gas of signature
-cost and 85 more billed bytes (a 20-byte signer and a 65-byte signature), 5,440 gas at the calldata floor (computed).
-
-### Chain slots
-
-One tree holds 16 chain slots of 2^h leaves. The same account address on two chains has two separate nonces, so
-without slots, nonce 5 on two chains would sign two messages with one key. The chain id is hashed into every leaf from
-CHAINID (`Account.yul:86`, `HashSigVerify.yul:104-109`), so a leaf built for one chain never verifies on another. The
-slot byte only says where that chain's subtree sits (`HashSigVerify.yul:21-23`). Unlisted slots hold
-EMPTY_SUBTREE = keccak256("nonce-bound-pq-wallet/empty-slot") (`pipeline/src/hashsig/tree.ts:11`). The demo lists one
-chain, 1337, in slot 0.
-
-### Rotation and admin calls
-
-Admin calls are SENDER frames from the account to itself (`Account.yul:121-129`), signed by a cold leaf.
-
-- `rotate(root, treeSeed, height)` installs a new tree and adds 1 to the epoch (`:133-147`). The new tree is built for
-  generation = new epoch, so it shares no one-time key with the old one, and the installed tree is refused (`:139`).
-  Rotation invalidates every pending lane, because their keys name the old epoch (`:59`), so the backend refuses to
-  rotate while lanes are in flight.
-- `setHotPolicy(hotStart, valueCap, feeCap, target)` (`:162-174`), with a guard that always leaves a cold leaf
-  (`:236-238`).
-- `setHybrid(bool)` refuses to turn on with no owner (`:153`); `setOwner(address)` refuses 0 while hybrid is on
-  (`:180`).
-
-## Parallel lanes on the alt mempool
-
-A lane is one nonce key with a transaction pending. To have N payments from one account in the mempool at once, give
-each its own key. Every Noncebound transaction already is a fresh key at sequence 0.
-
-### The rules, side by side
-
-`SC` is `vendor/mempool-workshop-sidecar/packages/executor/src`, the workshop sidecar vendored on Nov 5 at commit
-`2e22ff0a`. The devnet's sidecar reports `skandha/v4.1.1` and the vendored packages say 4.0.2, so the devnet may run a
-later build. `ERC` is the ERC-8421 draft, `ERCS/erc-8421.md` in ethereum/ERCs PR #2028, read on Nov 6. `ETHREX` is
-`docs/eip-8250.md` at ethrex commit `9aa3645d`, the devnet node's commit.
-
-| Rule | Devnet sidecar, the alt mempool that runs | ERC-8421 draft, not on the devnet | Public pool |
-| --- | --- | --- | --- |
-| Pending per (sender, key) | 1. A transaction sharing a key with a pending one in another slot is refused (`SC/services/MempoolService/service.ts:374-407`) | 4, with contiguous sequences (`ERC` L42) | EIP-8141: 1 per sender (mempool rule 7). ethrex's pool: 1 holder per key (`ETHREX` L56-62) |
-| Pending per sender | No cap for keyed transactions the sender pays for itself. Linear `[0]` transactions stay capped (`SC/services/MempoolService/constants.ts:1`; `reputation.ts:33-47`). A third-party payer stays capped (`reputation.ts:87-95,130-143`) | 64 for an unstaked sender (`ERC` L43) | 1 for this account, measured. ethrex admits several keyed ones only if the prefix reads none of the sender's storage (`ETHREX` L76-96; ethrex `mempool.rs:173-186`). Ours reads its own slots |
-| Stake | Not needed for these lanes (`reputation.ts:138-143`). A throttled entity is capped at 4, keyed included (`reputation.ts:114-129`) | Staked senders have no sender-wide cap (`ERC` L278) | none |
-| Verify budget | A flat 100,000 over the whole prefix plus signature costs (Day-0 probe) | 100,000 per unstaked entity, 1,000,000 staked (`ERC` L38-39, BUDGET-010 at L171-173). An earlier revision, read Nov 1, said 250,000 and 2,500,000 | 100,000 (EIP-8141 `MAX_VERIFY_GAS`) |
-| Money | Everything pending, max cost plus value, must fit the balance; when it no longer fits, New entries are cancelled newest first (`SC/services/MempoolService/obligations.ts:5-33`; `service.ts:409-478`) | reserved per payer | reserved per paymaster (EIP-8141, `reserved_pending_cost`) |
-| Relay | At most 4 New entries per 10 s pass, by tip, then in admission order (`SC/config.ts:628,635`; `SC/entities/FrameTxMempoolEntry.ts:213-216`) | n/a | n/a |
-| Replacement | Same slot with +10 % on both fees, or with no bump once 300 s have passed (`FrameTxMempoolEntry.ts:175-202`; `SC/config.ts:620`). We never replace | | one per sender, by fee bump |
-
-### What the lanes share
-
-- **Money.** Every pending lane's maximum cost plus value must fit the balance: the screens' "set aside for pending"
-  line.
-- **Relay throughput.** At most 4 lanes per 10 s pass, chosen across all senders, highest priority fee first.
-- **The throttle.** About 110 admissions without inclusions throttle the account to 4 pending
-  (`SC/entities/ReputationEntry.ts:35-69`, with `minInclusionDenominator` 10 and `throttlingSlack` 10 at
-  `SC/config.ts:601-602`).
-- **One journal writer.** One process owns a journal through a kernel file lock (`pipeline/src/leaves.ts`). Fire a
-  burst through the backend, or from a script with the backend stopped.
-- **A finite band.** 16 hot tickets; cold leaves 1 to 1007 at epoch 0. Leaf 0 cannot sign at epoch 0, because its key
-  would be the legacy key 0 (`Account.yul:57`).
-
-### Order and timing
-
-- Eight lanes need at least two relay passes, so they land over two or more blocks.
-- Our grinder never changes the priority fee, so our lanes are relayed in the order they were admitted; only lanes
-  within one pass can swap.
-- A landed transfer changes nothing the other lanes read. A landed `rotate` or `setHotPolicy` can cancel them: every
-  New lane is re-simulated each block (`SC/services/BundlingService/reconciliation.ts:423-477`).
-- Three devnet facts decide whether lanes land, all found on Nov 6 ([evidence](#parallel-lanes-and-the-stuck-payment)):
-  the public gateway admitted but had no peers to relay to, so send through the miner's sidecar; the sidecar relays the
-  highest priority fee first, so the pipeline raises every fee quote to a floor of 3 gwei (`withTipFloor` in
-  `pipeline/src/rpc.ts`, `MIN_TIP_WEI` in `pipeline/src/config.ts`); and ethrex drops a relayed lane when a
-  public-mempool transaction rebuilds the block, so bursts take a 180 s deadline (`demo/lanes.ts --expiry-seconds`).
-
-### The tooling
-
-- `pipeline/src/lanes.ts`: `laneMaxCostWei` (what the sidecar sets aside for one lane), `planLanes` (whether the
-  balance carries N lanes, how many passes, an estimated time), `relayConfig` (the sidecar's relay settings, or its
-  defaults flagged as assumed) and `explainRefusal`.
-- The backend's `GET /api/wallets/:address/lanes/plan` reserves no leaf and signs nothing. Every transaction record
-  carries `maxCostWei` and `wire`, the exact JSON sent.
-- `demo/lanes.ts plan` and `burst` drive the backend. `burst` plans first, sends N payments at once, follows every lane
-  to its end, then prints the status timelines, the most lanes seen pending at once, each admission report and the
-  exact JSON each lane sent (`demo/README.md`).
-
-What a refusal means:
-
-| Message contains | Meaning | Source |
-| --- | --- | --- |
-| `is already held by pending transaction` | The key is busy in another slot | `SC/services/MempoolService/service.ts:399-404` |
-| `cannot be replaced: fee too low` | A second transaction in the same slot: a signer bug. Never bump | `service.ts:509-512` |
-| `already known` | The same bytes again: follow the first | `service.ts:492-501` |
-| `cannot cover its pending frame transactions` | Over the money set aside | `service.ts:409-437` |
-| `Nonce mismatch: expected X, got Y` | X > Y: the key is already used. X < Y: the sequence is ahead | Day-0 probe |
-| `exceeds MAX_VERIFY_GAS` | Prefix over 100,000 | Day-0 probe |
-| `validation frame N: reverted with data 0x…` | The account refused it: decode the 32-byte reason, such as `hot: value cap` | `SC/services/UserOpValidation/validators/frameTx.ts:226-228`; `Account.yul:240` |
-| `revalidation failed as of block` or `relayed N times without being included` | Dropped: read the chain before anything else | `SC/services/BundlingService/reconciliation.ts:456`, `BundlingService/service.ts:340` |
-| `A pending frame transaction from this sender is already in the pool` | Public pool: one per sender | ethrex `error.rs:165` |
+The hash-based check line by line, what the frame may read, the ECDSA co-signature (off), chain slots, rotation and admin calls, and where the build differs from the design document: [docs/design.md](docs/design.md).
 
 ## Gas
 
@@ -405,76 +350,31 @@ What a refusal means:
 | Cold transfer, 8 points, simulated on the earlier chain | 94,900, so every point could run | 82,390 to 92,326 at 420 to 570 steps | as the first row | 186,245 for all 8 (simulation) |
 | Day-0 stub, no hashing, with owner ECDSA, block 405,523 of the earlier chain | not recorded | 20,317 | | 193,882 |
 
-How the columns are computed (`frameGasModel` in `pipeline/src/estimate.ts`, after ethrex's `transaction.rs` at
-`9aa3645d`):
-
-- fixed part = 12,000 + 475 per frame + 100 for the ARBITRARY entry + 6,000 per value-carrying frame
-  = 12,000 + 3 × 475 + 100 + 6,000 = 19,525;
-- billed bytes = frame data (an 8-byte deadline) + signature bytes (2,594) + the RLP of the nonce fields (3 bytes for
-  keys 1 to 127) = 2,605;
-- data = 4 gas per zero byte and 16 per other byte, about 41,500 here; floor = 64 per billed byte = 166,720;
-- gas used = fixed part + max(data + execution, floor) = 19,525 + 166,720 = **186,245**, matching the receipt and all
-  8 simulations exactly.
-
-The nonce key's RLP grows with the leaf, and each extra byte adds 64 gas at the floor: leaves 1 to 127 cost 186,245,
-128 to 255 cost 186,309, 256 to 1,023 cost 186,373, and a leaf from epoch 1 costs 186,565 (computed; the epoch-1
-transfer at block 2,907 used 186,565). A transfer with no value has no value-carrying frame and costs 6,000 less
-(180,565 at epoch 1, measured at blocks 2,660 to 2,671). The backend reports all four columns for every transaction it
-sends (`gas` on `GET /api/tx/:hash`).
-
-### The measured fit
-
-`pipeline/scripts/simulate-verify-gas.ts`, Nov 6, on account 2 of the earlier chain at its halted head, block 408,262.
-Each point was signed by a fresh cold leaf, journaled before signing and burned after. Nothing was sent.
-
-| Leaf | Hash steps | Verify frame gas | Frames (expiry / verify / transfer) | Whole transaction |
-| --- | --- | --- | --- | --- |
-| 1 | 420 | 82,390 | 3,051 / 82,390 / 100 | 186,245 |
-| 2 | 450 | 84,525 | 3,051 / 84,525 / 100 | 186,245 |
-| 3 | 480 | 86,280 | 3,051 / 86,280 / 100 | 186,245 |
-| 4 | 495 | 87,094 | 3,051 / 87,094 / 100 | 186,245 |
-| 5 | 510 | 88,429 | 3,051 / 88,429 / 100 | 186,245 |
-| 6 | 525 | 89,356 | 3,051 / 89,356 / 100 | 186,245 |
-| 7 | 555 | 91,344 | 3,051 / 91,344 / 100 | 186,245 |
-| 8 | 570 | 92,326 | 3,051 / 92,326 / 100 | 186,245 |
-
-Fit: verify frame = 54,630 + 66.09 × hash steps, largest residual 252 gas. From real receipts on the current chain
-(account 3, `pipeline/scripts/hashsig-devnet.ts`): 54,928 + 65.53 × steps over six included transfers (510 → 88,373;
-510 → 88,376; 495 → 87,397; 510 → 88,310; 480 → 86,246; 465 → 85,475). The two fits agree within about 20 gas at the
-510-step edge. Hash steps per message: 506 on average, 420 at the 1st percentile and 600 at the 99th, 45 at best and
-990 at worst; every reachable count is a multiple of 15. The standalone verifier alone measured 24,070 + 66.06 × steps
-(`pipeline/scripts/measure-verifier.ts`).
-
 ### Why the bill is flat
 
 The 2,594-byte signature dominates. The floor (166,720) is larger than data plus execution whenever execution stays
 under about 125,000 gas, and the prefix cap keeps it under 100,000. So every hash-signed transfer costs the same,
 whatever its verify gas. Cheaper hashing would not lower the bill; a shorter signature would.
 
-### The proxy finding (EIP-150)
+How each column is computed, the measured fit of verify gas to hash steps, the proxy's 63/64 holdback (EIP-150), grinding, and the caps: [docs/gas.md](docs/gas.md).
 
-The account is an EIP-1167 proxy. Its DELEGATECALL passes on only 63/64 of the gas left (EIP-150), so a verify frame
-declared at 90,000 can use about 88,643. Point 6 above shows it: 525 steps need 89,356, which runs out of gas behind the
-proxy. The grinder used to accept 525-step messages, about 14 % of all messages. Fixed in commit `5b24bd8`:
-`usableVerifyGas` in `pipeline/src/grind.ts` subtracts the holdback, and `GRIND` in `pipeline/src/config.ts` comes
-from the measured fit plus a 300-gas margin. Cold messages now fit up to 510 steps (66 % of messages) and hot ones up to
-409 (about 1 in 231, an exact count over the digit distribution). Three transfers on the current chain then used
-exactly 510 steps and fit (88,310 to 88,376 against the 88,643 usable).
+## Parallel lanes
 
-### Grinding
+A lane is one nonce key with a transaction pending. To have N payments from one account in the mempool at once, give
+each its own key. Every Winterlock transaction already is a fresh key at sequence 0.
 
-The signer changes the transaction until its message needs few enough hash steps, then signs once. It moves
-`maxFeePerGas` by one wei per try, up to 4,096 tries, and leaves the deadline exact. When the caller fixes the fee, the
-backend moves the last frame's execution limit by one gas per try instead. A preflight simulation still refuses any
-message the model gets wrong. Every transaction record keeps the grind (`grind` on `GET /api/tx/:hash`): the field
-varied and the steps of every message tried, such as 525 then 495 under a 510 limit (block 2,907).
+- **Money.** Every pending lane's maximum cost plus value must fit the balance: the screens' "set aside for pending"
+  line.
+- **Relay throughput.** At most 4 lanes per 10 s pass, chosen across all senders, highest priority fee first.
+- **The throttle.** About 110 admissions without inclusions throttle the account to 4 pending
+  (`SC/entities/ReputationEntry.ts:35-69`, with `minInclusionDenominator` 10 and `throttlingSlack` 10 at
+  `SC/config.ts:601-602`).
+- **One journal writer.** One process owns a journal through a kernel file lock (`pipeline/src/leaves.ts`). Fire a
+  burst through the backend, or from a script with the backend stopped.
+- **A finite band.** 16 hot tickets; cold leaves 1 to 1007 at epoch 0. Leaf 0 cannot sign at epoch 0, because its key
+  would be the legacy key 0 (`Account.yul:57`).
 
-### The caps beside it
-
-The declared prefix is 5,000 (expiry) + 90,000 (verify) + 100 (signature cost) = 95,100, under the 100,000 cap that both
-the public mempool and the devnet sidecar enforce (Day-0: 120,000 refused, 95,000 admitted). Quip's 190,792 is the call
-gas of a stateful wrapper with two storage writes, a different profile: compare verify with verify, and total with
-total.
+The devnet sidecar's rules beside the ERC-8421 draft and the public pool, order and timing, the tooling, and what each refusal means: [docs/parallel-lanes.md](docs/parallel-lanes.md).
 
 ## Devnet evidence
 
@@ -484,134 +384,13 @@ miner's sidecar `https://altmempool.forshtat.com/rpc` (`skandha/v4.1.1`), gatewa
 history in memory and reads the gateway, so every row below also carries its full hash and block; a lane sent to the
 miner's sidecar may not appear there.
 
-### The current chain
-
-The devnet halted at block 408,262 on Nov 6, 04:28 IST, and came back at about 11:54 IST as a new chain: the same chain
-id, ethrex build and system contracts, but a new genesis
-(`0x2ad3f67b059fbde111ad7af27cfb4955d997351579612237ca0318937a5bae7a`) and block numbers from 0. Every contract and
-balance was gone. Each seed is pinned to the genesis it was made for (`pipeline/src/genesis.ts`), so the seeds of the
-earlier chain refuse to sign here, as designed.
-
 | What | Transaction | Block |
 | --- | --- | --- |
 | **The qualifying transaction: the first hash-signed transfer on this chain.** Account 3 pays 1 wei with one WOTS+ signature of leaf 1 (nonce key `0x1`, sequence 0): 510 hash steps, verify frame 88,373 of 90,000, 186,245 gas; "included: 17 of 17 rules passed" | [`0x3446d855…`](https://explorer.altmempool.wtf/tx/0x3446d855f87b963451f0570105814ddf64d4a9237c5642d172430eebca883175) `0x3446d855f87b963451f0570105814ddf64d4a9237c5642d172430eebca883175` | 386 |
-| Five more cold transfers, leaves 5 to 9, all 17 of 17, for the gas fit | `0x9deeb8ffde62b3e6b285016b05ce621b6b0d24712a5d7693bb81de9b8cb45875`, `0xb49df1f54481bd0d6286d327d0f5c3f693abd64c3aa2852941055eae9c730dc6`, `0xac82c9ca6c75ddc2ea999412e66de2c7b0d3a515d4f379bf945ecc5511f152f6`, `0xd09fb2e8cf248b55b03cd1001bcdc477e6cede489787eea762af36c4bafa46b2`, `0x9b00f09510837d152ee9ef8138c584de3f142908911cb96532cf861be837be7a` | 399 to 433 |
-| **Hot ticket**, leaf 1008 (key `0x3f0`), no classical key, 0.001 ETH to the one allowed target: 405 steps, verify 87,947, 186,373 gas, 17 of 17 | [`0x8d0aefb7…`](https://explorer.altmempool.wtf/tx/0x8d0aefb70282cad3212ce08e9df8f0d9d7228805787fdb56faaea49c162272ce) `0x8d0aefb70282cad3212ce08e9df8f0d9d7228805787fdb56faaea49c162272ce` | 441 |
-| Two forgeries refused by the account in simulation, `sig: hash-based check`: one signature byte flipped, and a valid signature of leaf A under leaf B's nonce key | simulation only; leaves 2 to 4 burned | – |
-| The pipeline with plain ECDSA: the test EOA calls `increment()` on a counter contract in a frame transaction, nonce key `0x200000007`, 17 of 17, count 0 → 1 | `0xd801fbfd8f2bd2963b71df19091ec1a560dd3888099c6b46e96f59a4ad4313e5` | 366 |
+| Eight lanes at once, then the same eight on the public mempool | [docs/devnet-evidence.md](docs/devnet-evidence.md#parallel-lanes-and-the-stuck-payment) | 2,272 to 2,275; 5,729 and 5,730 |
+| Sent from MetaMask Flask | `0xfce762a999fec43241b92f086a643265d0977f6d42511da6fe814f303a46d56a` | 5,703 |
 
-### Parallel lanes and the stuck payment
-
-All on account 3, through the backend, on Nov 6.
-
-- **8 lanes at once, the scene** (about 16:00 IST): admitted 8 of 8, 8 pending at once, landed in two blocks of four,
-  57 s from the first send to the last landing (leaves 36 to 43):
-  - block 2,272: `0x39b205e1fa214ca13b5c8bd956c6477993f586ed4a2fc67846b21b62575b5163`,
-    `0xebfc703ea10c576eb54b81acae727046cf41c13e0f40bcdaec309410742b0f2b`,
-    `0xec4cfe374c2aaa00a2ca7a0fd5d08f745e97753aee706545d718fb5a9cd058b2`,
-    `0xc5a16a74492e2fa1ec92bd41d55ab40375594e533a198e23da45f4af73db0125`;
-  - block 2,275: `0xb6d18d7323074c006125cb159545d9af953243eda2c994604e8df668f3e3ad92`,
-    `0xcc8622f4dafc80371b2156b596a49ccb7ad22316ab5ae713c502cdd63e50e596`,
-    `0x8a39af57f89ccbcc693eda8b65588879934dacbe06ca5bc132f2bf720e83f2d6`,
-    `0xf71a23cceb43fd3447bca7ad2c7647ce5b489be3d5325ca03c3a459594855295`.
-- **4 lanes at once**, all in block 2,255 (leaves 32 to 35):
-  `0xcd7392ff8a2595f1f27b70e9f55d9006be30a7dc446544a6cc650e5e17569a8b`,
-  `0x06df7eeffb9ff4dce6009b684b6cc46691598c8974f3cbfd4bb0b7ff747ab4c2`,
-  `0x922b410cebeba99b271666c7367377daf49c1ea43da2a0611b9bee947b242f6a`,
-  `0xd85174489240554f1748e0470bc6a3e8bfdcaffd5e5f074c4d80446fa45c3991`. One lane alone, leaf 31, landed in block 2,247
-  about 19 s after the send (`0x2fdd5db408a23a6197cce7c2714d1614b1a282129dc7f625d1b44f171a246787`).
-- **The public mempool holds one per sender** (`demo/lanes.ts burst --n 2 --mempool public`): leaf 29 was admitted and
-  landed in block 2,165 (`0x0d9f3e811f69b34ccf35989fe0370aa8e867357f4fa057121926d3b9db988fb8`); leaf 30 was refused at
-  submission because the account already had one pending (`0x2f85ba7741349ffbe67bee24fb5b1ce3d6eb9a14b01866b5a776ecc1cb6ad202`,
-  never pending; the leaf is burned).
-- **The stuck payment** (0.001 ETH, a 4 s first deadline, one retry): the first attempt, leaf 44
-  (`0xfd8fc1be49389c57ff4e1efe67d91e80c29f51300374432575bb8d39f46da377`), expired with its key unused in block 2,285, its
-  leaf burned and no fee paid. The retry went on a fresh lane, leaf 45, key `0x2d`, neither re-signed nor fee-bumped,
-  and landed in block 2,293 about 15 s after its send (`0x28cdd22fb85d2da094d0a05db311a6ba2ec868246c4da3b1ebd2af9593885e00`).
-- **A hot ticket signed from the ticket file** by the ticket device, with no master seed: 0.005 ETH, under the
-  0.01 ETH cap, leaf 1,011, key `0x3f3`, block 2,300 (`0x76870aaeb0e218431107db7cd670b737116d1c33982859bfe5d6ff34648a04e9`).
-- **Two hot refusals** by the node's preflight simulation, each named by the account: 0.1 ETH against the 0.01 ETH cap,
-  `account: hot: value cap` (leaf 1,009); 0.001 ETH to `0x…dEaD`, `account: hot: frame target` (leaf 1,010). Both
-  tickets were signed and so are burned; neither was sent.
-- **Before the fix**, between 14:50 and 15:30 IST, two 8-lane bursts and two stuck-payment retries all expired with
-  their keys unused, so no fee was paid (leaves 10 to 28 burned). The gateway admitted but had no peers to relay to;
-  the miner's sidecar relayed by priority fee, and our oracle-priced tip of 1,999,999,993 wei waited behind a team that
-  pays a flat 2 gwei; and ethrex drops a relayed lane when a public-mempool transaction rebuilds the block (`payload.rs`
-  at `9aa3645d`). Over 197 relay pushes from all senders, a push landed in 62 of 66 blocks with no public transaction
-  and 20 of 51 with one. The tip floor, the 180 s burst deadline and sending in a quiet window fixed it. One hash per
-  group: `0xebd20c49c4395887c82f051f8c9171ce1ff4a764cacb2fd1a65c20250b6411fd` (gateway burst),
-  `0x43872511cdb78dbd4d0303158985ea703a4c1b0f7d332dee9286a703cb553468` (sidecar burst, relayed 4 times and cancelled).
-
-### The three screens, end to end
-
-On Nov 6, 16:13 to 16:49 IST, the three screens on `main` drove a backend on the devnet through the miner's sidecar.
-The backend created a new wallet, `0x273CA502D7A6648A043e958E8d6618d16F892C80`, by an EOA call to the factory
-(`0x01cf5e56d53859e13f456454ec967628065ac200ef5ca02ea7d03bc29fad7c78`), funded it from the EOA because the sidecar's
-faucet was off (`0xeac14ea219a2072274456a12d53e5bafca938c2c707bb20e1215d589051df42b`), cut tickets and made 38
-transactions. Every one ended as designed.
-
-| Scene | What happened | Transactions | Blocks |
-| --- | --- | --- | --- |
-| Hot and cold: the phone pays while the laptop is offline | Three hot payments on three lanes; leaves 1008 and 1010 landed | `0xf6ab1a631a2d32ddbaf95f0e74b6be572e198896a708b0b31bfa5a8a7b2a3710`, `0x1c490883563db0dcdf6f89a82aaa09fe72c15e2c72976f001def78e05457f971` | 2,557 |
-| Hot and cold: the stuck payment | Leaf 1009, a 4 s first deadline, expired with its key unused; the retry on leaf 1014, not re-signed, landed | `0xfdc22d0deb352a93688c3b8c58bf04eeb1fc845f2eb53d711792cfcdbe00cc65` → `0xb9b6bf3eaccb99a4e6299bd00a4526cd2d8800c8b4d9b6e0b26d1efc83c60743` | 2,555 (expired), 2,565 |
-| Hot and cold: Mempool switched to public | Three payments 3 s apart: each was admitted only while none was pending, so leaves 1011 and 1012 landed one block apart and leaf 1013 was refused, "A pending frame transaction from this sender is already in the pool" | `0x57ccec4e07fa9c5a8d2688976163cace6ac95888943ad494cf611925461568e3`, `0x117f12cc2ba6e8dd0a2d57ac8f76580c6483940b0d218efcd73385ebf52d5e58`; refused `0xd2e6847e0f154d032177cfdb018d88339bacf8f72668626e224ceb49b606bc13` | 2,556, 2,557 |
-| Kill switch | `setHotPolicy` with value cap 0, signed by cold leaf 3; a hot payment (leaf 1015) refused, `hot: disabled`; cap restored to 0.01 ETH by cold leaf 5 | `0x69d346860ef645bcd1f169944bf91084c4465fa69d979e0feb4bbe8214898102`, `0xe71540ec5724bf63f9449066e8b719233ead43a8244279d790729e61ddac68d0` | 2,590, 2,600 |
-| Agent: four tranches in one second | Leaves 1016 to 1019, 0.01 ETH each, all in one block | `0x599f4bfc124e226f43d0ce28065cecf33983232d8c4ed55ef687b897b5055190`, `0x667da2c230aaf1788c226c7dcbf8475543053229d97ea2cd97997801f944a8a6`, `0x68f66bd46e6d3ea6a3d71589471131074178644e35826a6aac898d40f5442179`, `0xb8f4fdb1d04ed0e4afa98a644a25cab2986fc80a77957a46c7bacf00bde0779a` | 2,612 |
-| Agent: server compromised | 0.001 ETH to a new address refused, `hot: frame target` (leaf 1020); 0.1 ETH refused, `hot: value cap` (leaf 1021) | refused in preflight, never sent | – |
-| Rotation | `rotate` signed by cold leaf 8; the backend switched to epoch 1 once the chain showed it | `0xc413551b3cdf799da7c926f54d710663b48a15b2ceedd1c3b8ea659c75d90eef` | 2,652 |
-| Session: eight moves, at epoch 1 | Leaves 1008 to 1015 under keys `0x1000003f0` to `0x1000003f7`, landed out of order over two blocks | 4 in 2,660 (`0xdaac9a27b75a03bedc5bbe549d0fc4b251ba0d848c1f9b3f5f68fe6c14abd747`, …), 4 in 2,662 (`0xa3fdd862a6ad9d526998614d7c519ff2ec1b125f1111f789dac68c803f4aaa6c`, …) | 2,660, 2,662 |
-| Session: Mempool switched to public | Eight moves: two landed, six refused while one was pending | `0xc2068b3cd44f6799699b1e6fb92f86c9be52b11b8230c3ccc46002d1fc5a2f86`, `0x3c0330edd076097ca7f2ae6d83a60c94b0619295b958429ff54ac392402e0f76` | 2,670, 2,671 |
-| Cold payment at epoch 1, with the grind recorded | Leaf 0 of epoch 1 (key `0x100000000`): messages of 525 and then 495 steps tried under a 510 limit | `0x14e518e52dd1801bdaeaf97e4c33dd29927321e6608f100ed6139ed8af265856` | 2,907 |
-
-### The earlier chain (before the halt)
-
-These blocks no longer exist; the explorer links are dead.
-
-| What | Transaction | Block |
-| --- | --- | --- |
-| The first hash-signed transaction of the event: account 1 (`0x9908548a8b28d85191dc04d27d1d3c6e1430439b`), leaf 3 (nonce key `0x3`, sequence 0), 420 hash steps, verify 89,006 of 94,900 declared (an older verifier), 186,245 gas, 17 of 17 | `0x38b51a318a039225d17feaf6257b7f71c1ca66c81fb511d5b8a90ad3dad26475` | 407,107 |
-| The pipeline's first transaction (V2): the test EOA with native ECDSA, nonce key `0x200000001`, a leading expiry frame | `0x31cc7937cb5d7ba3f48e1f7e5b75ee6070ff34f8396a4685e87b866cee2464af` | 405,073 |
-
-### Accounts and contracts
-
-| What | Address |
-| --- | --- |
-| **Account 3**, current chain: h = 10, hotStart 1008, hot value cap 0.01 ETH, hot fee cap 0.002 ETH, allowed target `0x5544596212F91984C986A919C8026DF0576816f9`, hybrid off; created at block 375 (953,766 gas), funded 0.2 ETH at block 376 | `0xf3e63d269dae09032ea950cd9722733e9b3f2d37` |
-| Implementation (block 373) and factory (block 374), current chain | `0x13075a0f56d6a793eba4493d866e6502052abe87`, `0xe7227c802ea370f04ae533827041c89dc5a4e659` |
-| The screens' wallet, current chain, created by the backend | `0x273CA502D7A6648A043e958E8d6618d16F892C80` |
-| Test EOA | `0xe8CC33DDd7Aa454c2Ce7f9473CC51d68352dD57d` |
-| Earlier chain: account 2 (current verifier), its implementation and factory; account 1 (older verifier); the standalone verifier used for gas measurement | `0x4565906974d62abf53ad28165ef0ec43a1e39f57`; `0x9b8ed97f198ce8f8adb20e16056fb1a29818213f`, `0x4b1cbca3a579bb55b1f948ad1c517a05c9aca6cb`; `0x9908548a8b28d85191dc04d27d1d3c6e1430439b`; `0xA6Ecb14e644631C0ae9178Ab3383a72Fc384ec61` |
-
-### Day-0 results
-
-Probed from Nov 5, 21:00 IST, on the workshop devnet, before any project code was written. The probe scripts are kept
-outside this repository.
-
-| Check | Result |
-| --- | --- |
-| Chain and clients | Chain id 1337; 6 s blocks (over 10 blocks); node `ethrex/v23.0.0-eip8141-tracer-9aa3645d…`; sidecar `skandha/v4.1.1` |
-| Legacy nonce encoding | `[0]` accepted. `[]` refused: "nonceKeys count must be between 1 and 16" (-32602) |
-| One key, used twice | Sequence 0 admitted and landed. The same key at sequence 0 again: "Nonce mismatch: expected 1, got 0" (-32500); its nonce-manager slot reads 1. The same key at sequence 1 is admitted, so the account itself must require sequence 0 (`Account.yul:58`) |
-| Single-use sentinel 2^64 − 1 | Not sent: the sidecar's static check refuses it ("nonceSeq must be < 2**64 - 1") |
-| Two keys pending at once | Two keyed transactions on two keys from one EOA pending at once, landed in the same block. A second transaction in a pending (sender, key) slot at the same fee: "Frame transaction cannot be replaced: fee too low" |
-| TXPARAM | Selectors 0x00 to 0x11 exist; the values logged on chain matched (block 405,513) |
-| SIGPARAM, SIGDATACOPY, FRAMEPARAM | Operand orders from the ethrex source at `9aa3645d`, confirmed on chain. All 18 reads `Account.yul` needs pass the tracer in a VERIFY frame: 317 gas besides the 20,000 key cost |
-| Yul with `verbatim` | Compiles with solc 0.8.38 `--strict-assembly --optimize`; its TXPARAM read runs on chain (block 405,590). A hybrid probe passed 14 checks, including SIGDATACOPY of a 2,594-byte entry, for 1,379 gas besides the key cost |
-| Expiry verifier | No code at the EIP's `0x81413f0c…FfFf`. Live at `0x…8141` (26 bytes). A leading expiry frame is accepted; it used 3,051 gas (block 405,073) |
-| Nonce manager | 5 bytes (`revert(0,0)`) at `0x…8250`; no code at the EIP's address |
-| Recent roots | 144 bytes at `0x…8272`; none at the EIP's address. Write and reference not tried |
-| Verify budget | A 120,000 prefix is refused: "validation prefix execution gas sum 120000 + signature-verification cost 100 = 120100 exceeds MAX_VERIFY_GAS 100000" (-32602). 95,000 is admitted. A flat 100,000, no per-entity budget |
-| First use of a key | 20,000 execution gas inside the verify frame (20,170 at sequence 0 against 170 at sequence 1) |
-| Proxy | An EIP-1167 proxy's DELEGATECALL is accepted in the verify frame; about 3,060 gas (23,227 against 20,170 direct) |
-| Account checks before hashing | Cold 30,677; hybrid cold 30,798; hot 37,300, measured without the hash-based check |
-| Signature entry | A 2,594-byte ARBITRARY entry beside a 65-byte ECDSA entry is admitted and included; ARBITRARY costs 100 toward the prefix cap; TXPARAM 0x08 equals the vendored codec's `computeSigHash` (checked on 2 transactions) |
-| Calldata floor | 193,882 gas used with a 20,317-gas stub verify frame (block 405,523): the floor sets the bill |
-| CHAINID | Passes the tracer |
-| Bytecode | `account/build/Account.bin`: 1,992 instructions, none of ORIGIN, TLOAD, TSTORE, CALLCODE, BLOBHASH or SELFDESTRUCT |
-| Simulation fields | `ethrex_simulateFrameTransaction` returns `canonicalMempoolValid` and `canonicalMempoolViolation`, not the documented `valid` and `violation` |
-| Old state | Real state only for about the last 126 blocks. Older block numbers silently get the latest state, with no error |
-| Faucet | 1 ETH per call on the gateway; a code-less address can be funded |
-| Not run | A 2,914-byte entry (h = 20); `eth_estimateFrameTransactionGas` across 60,000 to 95,000; a recent-root write and reference; the stake flow |
+Every transaction behind the numbers, the three screens end to end, the earlier chain, the Day-0 probe results, and the divergences from the drafts we found and reported: [docs/devnet-evidence.md](docs/devnet-evidence.md).
 
 ## Trade-offs
 
@@ -630,9 +409,9 @@ outside this repository.
 
 This table is the design document's, unchanged. Where the build differs from it:
 
-- **Hybrid:** off in the build, not on by default ([Hybrid co-signature](#hybrid-co-signature-off)).
+- **Hybrid:** off in the build, not on by default ([Hybrid co-signature](docs/design.md#hybrid-co-signature-off)).
 - **Keyed only:** no transaction uses the legacy nonce, not even the deployment, because an EOA calls the factory.
-- **Minimal proxy:** the DELEGATECALL also holds back 1/64 of the verify gas ([the proxy finding](#the-proxy-finding-eip-150)).
+- **Minimal proxy:** the DELEGATECALL also holds back 1/64 of the verify gas ([the proxy finding](docs/gas.md#the-proxy-finding-eip-150)).
   "Under 100k" is the code deposit alone (45 bytes × 1,530 = 68,850 state gas); a whole creation also pays for the new
   account and its storage slots.
 
@@ -661,9 +440,8 @@ the first on frame transactions (NiceTry's FORS+C FrameAccount, with an enforced
 | QRL (Quantum Resistant Ledger) | XMSS-based chain since 2018 | Wallets use the transaction nonce to pick the next one-time key; the chain also tracks used OTS indices on chain | its own protocol | n/a | Historical prior art for nonce-guided key selection |
 | EIP-8310 (2026-06-19) | Post-quantum keystore for stateful leanXMSS validator keys | Synchronized mode leaf = f(slot); signer-side high-water mark; reserved disjoint leaf ranges; durable state authority | consensus layer | n/a | The consensus-layer analogue of this idea; its warning that recovering a seed is not the same as safely resuming signing applies here too |
 
-**A note on the name.** This project's working name was Winterlock, and its repository, packages, paths and variables
-still use it. It is not the Safe forum's Winterlock proposal above, which is different work by other people; the
-project was renamed Noncebound on Nov 6 so the two are not confused.
+**A note on the name.** This project is not the Safe forum's Winterlock proposal above, which is different work by
+other people: an EIP-1271 Safe owner, not an account on frame transactions.
 
 **Deliberate reuse.** We adopt Quip's WOTS+ wire format bit for bit (chain function, randomization elements, checksum,
 key hash), so their code can serve as a test oracle (`account/test/HashSigVectors.t.sol`,
@@ -697,13 +475,13 @@ prize. What the prize asks for, where it is in this repository, and where it sho
 
 | The prize asks for | Where it is |
 | --- | --- |
-| A frame-transaction application on the alt mempool; area one names "PQ-secure smart wallets" | The account (`account/`), the pipeline (`pipeline/`), the backend and the three screens. The verify frame fits the 100,000 cap; what needs the alt mempool is many hash-signed payments from one account pending at once ([Parallel lanes](#parallel-lanes-on-the-alt-mempool)) |
-| An admitted transaction on the devnet explorer | [`0x3446d855…`](https://explorer.altmempool.wtf/tx/0x3446d855f87b963451f0570105814ddf64d4a9237c5642d172430eebca883175), block 386, 17 of 17 rules passed, and every transaction in [Devnet evidence](#devnet-evidence) |
+| A frame-transaction application on the alt mempool; area one names "PQ-secure smart wallets" | The account (`account/`), the pipeline (`pipeline/`), the backend and the three screens. The verify frame fits the 100,000 cap; what needs the alt mempool is many hash-signed payments from one account pending at once ([Parallel lanes](#parallel-lanes)) |
+| An admitted transaction on the devnet explorer | [`0x3446d855…`](https://explorer.altmempool.wtf/tx/0x3446d855f87b963451f0570105814ddf64d4a9237c5642d172430eebca883175), block 386, 17 of 17 rules passed, and every transaction in [Devnet evidence](docs/devnet-evidence.md) |
 | The ability to explain the design, the code and the trade-offs | [Design](#design), [Gas](#gas), [Trade-offs](#trade-offs), and the verify frame line by line in `account/yul/Account.yul` |
 
 The demo runs the three screens on the devnet: hot and cold first (parallel lanes, the stuck payment and its retry,
 the public mempool's refusal), then the agent (four tranches in one block, the two named refusals), then the session
-(moves landing out of order). [The three screens, end to end](#the-three-screens-end-to-end) lists every transaction
+(moves landing out of order). [The three screens, end to end](docs/devnet-evidence.md#the-three-screens-end-to-end) lists every transaction
 of one such run.
 
 ### What existed before the event, and what was built during it
@@ -732,31 +510,11 @@ During the event:
 | Nov 6, 11:58 | The local fake chain, `fakechain/` | PR #7, `ef9b102` |
 | Nov 6, 14:15 to 15:45 | The backend, the three screens, the parallel-lanes CLI, a browser- and Snap-safe pipeline core | PR #8, `88e9660` |
 | Nov 6, 15:54 to 16:46 | The tip floor and the 180 s burst deadline; the screens' Ledger design and the key register; the grind and gas columns on every transaction | PR #9, `a724fb7`, `326471f`, `2542891` |
+| Nov 6, 17:15 to 22:45 | The MetaMask Flask Snap; sending from MetaMask through an ERC-4337 envelope and the local bundler, after a throwaway spike; every scene run again on the devnet | `d3c70f9`, `16109bc`, `510d053`, merged as `98014fe` |
 
 The plan expected an outside signature library to be published before the event; it was not, so the hash-based scheme
 was written during the event (`account/yul/hashsig/HashSigVerify.yul:1-2`). The qualifying transaction of the earlier
 chain landed at block 407,107, before PR #3 was merged.
-
-## Differences from the design document
-
-| The design says | The code does | Why |
-| --- | --- | --- |
-| WOTS+ randomization elements r[0..14] | r[1..15] (`HashSigVerify.yul:7,42`) | Quip's `WOTSPlus.sol` uses r[1..15], and the oracle tests pass |
-| The vector file's `params.chains` | The Rust vector file writes `params.hashChains` | Not changed during the event |
-| CLI `--seed` | No `--seed` flag: `--seed-file` or `PQ_SEED` only | The plan says never pass a seed as an argument, where process lists show it |
-| `export-leaves` without a band | Needs `--hot-start` and refuses colder leaves | A ticket must be a hot leaf |
-| `sign --ticket-file` with the tree flags | Refuses the tree flags | The ticket file carries them |
-| `verify` prints `{ok: false, reason}` | Exits 1 with an error object | Not changed during the event |
-| `vectors --seed --count` | Takes `--height`, `--chains` and `--out` only | Not changed during the event |
-| A tree cache; sign under 50 ms warm | No cache: 0.36 s per signature from the seed at h = 10 | Not changed during the event |
-| No WebAssembly | `signer-wasm/` exists, with tests but no build notes | Built early for a Snap; nothing uses it, because the pipeline and the Snap example sign in TypeScript |
-| `hashsig_verify(entry, entryLen, msgHash, root, treeSeed, height, chainId)` | Takes the leaf too: `(…, height, leaf, chainId)` (`HashSigVerify.yul:15`) | The leaf comes from the nonce key, not from the entry |
-| The demo's stuck payment is a low fee | A 4-second first deadline (`firstAttemptExpirySeconds: 4`, `retries: 1`) | On this devnet a fee below the 7-wei base fee is refused at admission and any fee above it is included, so a low fee cannot stick |
-| 4 pending per lane, 64 per unstaked sender; eight lanes "in one or two blocks" | 1 per key, no per-sender cap for self-paying keyed lanes, at most 4 relayed per 10 s pass; "two or more blocks" | The devnet sidecar's real rules, from its code; 4 and 64 are the ERC-8421 draft's |
-| Deployment by a deploy frame on the legacy nonce | An EOA calls the factory; the verify frame refuses `[0]` | A deploy frame needs about 546,000 state gas, over the 500,000 cap |
-| Hybrid on by default | Off | The plan's default for the demo |
-| At most four cold SLOADs | Three for a cold leaf, six for a hot leaf | The hot rules need slots 3 to 5 |
-| A priority fee from the sidecar's quote | The quote raised to a 3 gwei floor (`WL_MIN_TIP_WEI`) | The sidecar relays the highest tip first, and its quote sat below other teams' fixed 2 gwei |
 
 ## Known limitations
 
@@ -786,96 +544,12 @@ chain landed at block 407,107, before PR #3 was merged.
   runs a DELEGATECALL to the implementation (about 2,700 gas with a cold implementation). It cannot receive ETH from a
   contract that forwards only the 2,300-gas stipend (Solidity's `transfer` and `send`); a plain `call` with value works.
 - **Explorer links.** The explorer reads the gateway, so lanes sent to the miner's sidecar may not show there.
-
-## Divergences found on Day 0
-
-To be filed on the sidecar and ethrex repositories.
-
-| # | Divergence | Where |
-| --- | --- | --- |
-| 1 | The expiry verifier and the nonce manager are at `0x…8141` and `0x…8250`; the EIP addresses have no code. The same for recent roots (`0x…8272`) | sidecar docs |
-| 2 | `ethrex_simulateFrameTransaction` returns `canonicalMempoolValid` and `canonicalMempoolViolation`; the devnet readme says `valid` and `violation` | sidecar docs |
-| 3 | ethrex `docs/eip-8141.md` at `9aa3645d` describes a SIGPARAM 0x04 copy, which halts | ethrex |
-| 4 | ethrex docs give an intrinsic cost of 15,000; the code (`transaction.rs`) charges 12,000 | ethrex |
-| 5 | Older blocks silently answer with the latest state, with no error (only about the last 126 blocks are real) | ethrex |
-| 6 | From about 23:40 IST Nov 5 the gateway admitted frame transactions but never relayed them; `skandha_explorer_peers` was empty | sidecar, event Discord |
-| 7 | The chain halted at block 408,262 (04:28 IST Nov 6) | event Discord, reported |
-| 8 | The miner's sidecar answers "Faucet is disabled"; only the gateway's faucet pays | event Discord |
-
-The devnet pins older drafts, which are not bugs: `[]` is refused and the legacy nonce is `[0]`; the sentinel
-2^64 − 1 is refused; a key's first use costs 20,000 execution gas, not the EIP's 97,920 state + 12,100;
-`computeSigHash` replaces empty-msg signature bytes with empty bytes, where the EIP uses their length.
-
-Found later, on Nov 6, in the vendored sidecar's source:
-
-- `skandha_explorer_listTransactions` filters by status only, with no sender filter (`SC/modules/explorer.ts:108-139`).
-- An error while re-simulating a lane, a transport error included, cancels that lane, so a node outage during
-  revalidation cancels every New lane on that node (`SC/services/BundlingService/reconciliation.ts:436-461`).
-- The workshop's `explainRejection` maps only OP-011 and STO (mempool-workshop `src/lib/frameTx/send.ts:55-65`).
-
-## Using the pipeline in a browser or a Snap
-
-The pipeline has two entries. `@winterlock/pipeline` (`pipeline/src/index.ts`) is for Bun (its file journal locks with `bun:ffi`): the backend, the scripts and the tests use it, unchanged. `@winterlock/pipeline/core` (`pipeline/src/core.ts`) runs anywhere JavaScript runs, a browser page or a MetaMask Snap included: it builds frame transactions, grinds them to fit the 90k verify limit, signs them in two passes with the WOTS+ keyring, keeps the journal of exposed leaves, and sends and follows them, with no Node or Bun API, no `process` and no file system.
-
-```ts
-import { GRIND, Keyring, MemoryJournal, createPipeline, keyringSigner } from "@winterlock/pipeline/core";
-
-const p = createPipeline({ chainId: 1337n, nodeUrl, gatewayUrl });  // its own network: nothing global, nothing from env
-const signer = keyringSigner(new Keyring({ seed, generation: 0, height: 10, chains: [1337n] }));
-const journal = MemoryJournal.open(stored, { wallet, chainId: 1337n, epoch: 0, height: 10, treeSeed: signer.treeSeed }, { store });
-await p.sendKeyed({ journal, band: { from: 1, to: 1008 }, sender: wallet, calls, verifyGas: 90_000n,
-  signatures: (leaf) => [{ kind: "hash", signer, leaf }], grind: GRIND.cold, preflight: true });
-```
-
-- `MemoryJournal` keeps the journal's rules (a leaf is handed out once, a missing journal is never recreated empty, statuses only move forward, one writer) and saves through a store the host gives it, such as a Snap's `snap_manageState`. Such a store is asynchronous, so the send path waits for it (`Journal.durable`) before a leaf signs and before a transaction leaves; a failed save stops it handing out leaves. The rules, and what a host must add (one journal instance for its whole life, a rotation after restoring an older copy), are listed in `pipeline/src/journal.ts`.
-- Every path that reserves or settles leaves (`sendKeyed`, `estimateCalls`, `settleSubmitted`) refuses a journal of another chain or wallet, and a pipeline's node must answer its own chain id: with pipelines on several chains, one leaf must never sign on a chain whose journal does not know it.
-- `bun run build` in `pipeline/` writes `dist/core.js` (one ES module, about 230 KB, viem and the hashes inside) and its type declarations in `dist/types/`. It refuses to finish if the bundle references a Node or Bun API, or if the core does not typecheck against browser types alone.
-- Proof, in `pipeline/test/`: `core-bundle.test.ts` scans the browser bundle, then runs a bundled end-to-end scenario (keyring, grind, two-pass signature, a journal with an async store, a full send against a stand-in chain) under SES lockdown in a compartment with only a Snap's globals, and checks it signs the same bytes as in Bun. `package.test.ts` packs the package, installs it into an empty project, typechecks that project and runs it in plain Node (`dist/core.js`) and in Bun. `journal.test.ts` covers `MemoryJournal`, a store that fails, and pipelines side by side.
-- `pipeline/examples/browser/`: `bun examples/browser/serve.ts`, then http://127.0.0.1:15190. The page builds a height-10 tree from a throwaway seed (about 2 s), grinds and signs a transfer, and checks the 2,594-byte entry against the root. Its Content-Security-Policy allows no connection, so nothing can be sent.
-- `pipeline/examples/snap/`: an example MetaMask Snap, not a wallet. It takes its seed from `snap_getEntropy`, salted with an account nonce created at install (a reinstall gets a new tree, never the old one's leaves), keeps one journal in `snap_manageState`, handles requests one at a time, answers only `http://127.0.0.1:15190`, signs, and sends against a stand-in chain. On a real chain a send's follow phase can outlast MetaMask's 60 s request limit, so a real Snap would answer once the transaction is submitted and settle it in a later request. `bun run build` in `pipeline/`, then `bun install && npm test` in the example typechecks it, builds it with MetaMask's Snaps CLI (which also evaluates the bundle in its sandbox) and runs it in MetaMask's Snap simulator (`@metamask/snaps-jest`).
-- Found while building it: a bare SES compartment throws on `Date.now()`. A Snap's `Date` works, so the SES test gives the compartment one, as MetaMask does. MetaMask's test stack (`@metamask/utils` 12, Oct 2026) ships ES-module-only packages that Jest 29 cannot require, so the example converts them with SWC (`test/esm-to-cjs.cjs`).
-
-## Sending from MetaMask (Flask)
-
-MetaMask cannot build a frame transaction, but MetaMask Flask can send an ERC-4337 user operation for an account an
-Account Snap holds, to the bundler URL the Snap names. So the Winterlock Snap (`snap/`) is also an Account Snap whose one
-account, type `eip155:erc4337`, is the Winterlock account, and a local bundler (`bundler/`) unwraps what MetaMask sends.
-Nothing on chain is ERC-4337: there is no EntryPoint and no bundle. The user operation is only the envelope.
-
-1. A page calls `eth_sendTransaction` from the Winterlock account, with the fee fields (MetaMask's 4337 path refuses a
-   send without them, and Flask cannot estimate fees on chain 1337).
-2. MetaMask asks the Snap to prepare: the Snap reserves a fresh leaf whose key is unused on chain and answers with
-   `nonce = nonceKey << 64` (an ERC-4337 nonce is a 192-bit key and a 64-bit sequence; ours is key and 0), the call
-   list as `callData`, gas limits that sum to an upper bound of the transaction's gas limit, and
-   `bundlerUrl = http://127.0.0.1:15192/rpc`.
-3. The user confirms in MetaMask's own screen. MetaMask asks the Snap to sign. The Snap signs only the user operation
-   it prepared, at the user's fees, once per leaf (a second request for the same leaf is refused), after the tip floor,
-   base fee and balance checks; it records the leaf "submitted" before the signature leaves the Snap. The signature
-   field carries the whole signed frame transaction.
-4. MetaMask posts the user operation to the bundler, which holds no key. `checkUserOpTx` (`pipeline/src/userop.ts`), run
-   by the Snap before signing and by the bundler before sending, ties every frame, fee and limit of the transaction to
-   the user operation: nothing that pays anyone else, more, or at another fee is ever sent. The bundler refuses a second
-   transaction on a nonce key it already carries, sends to the alt mempool, follows the key on chain, and reports
-   `success: false` only for Expired or Reverted, never for an included transaction.
-
-Live on the devnet, Nov 6: two sends from MetaMask landed (blocks 5,703 and 5,808, about 25 s after confirming), each
-settled in the Snap's journal.
-
-```sh
-(cd pipeline && bun install && bun run build)
-(cd bundler && bun install && bun src/main.ts)          # http://127.0.0.1:15192/rpc
-(cd snap && bun install && npm run serve)               # local:http://localhost:15191, MetaMask Flask only
-(cd snap && bun site/serve.ts)                          # http://localhost:15190: create, fund, Add to MetaMask, Send from MetaMask
-```
-
-Found while running it live: MetaMask's sign request carries the user operation alone, not the entry point the keyring
-API's docs list; and work a Snap leaves running after it answers did not progress in real MetaMask, so the Snap finds
-each lane's end at the page's next request instead. Tests: `pipeline/test/userop.test.ts`, `bundler/test/`, and the
-MetaMask cases in `snap/test/snap.test.js` (MetaMask's Snap simulator, `npm test` in `snap/`).
+- **Sending from MetaMask needs Flask** and the local bundler running. Flask may keep a stale balance for an EOA on
+  chain 1337 and disable its confirmation; reopening Flask on the devnet refreshes it.
 
 ## Authorship and AI use
 
-Noncebound is a solo hackathon project, built during the event by Vicky Prasad
+Winterlock is a solo hackathon project, built during the event by Vicky Prasad
 ([github.com/vickyshaw29](https://github.com/vickyshaw29)), who authored every commit and drove every AI tool. It
 follows a design document written before the event and disclosed to ETHGlobal (see
 [What existed before](#what-existed-before-the-event-and-what-was-built-during-it)).
@@ -891,6 +565,9 @@ co-signature off; and declare every limit rather than let a judge find it.
 The code was written with Claude Code (Anthropic) under those decisions, and reviewed and run by Vicky. 24 of the 26
 non-merge commits carry a `Co-Authored-By: Claude` trailer, and the boilerplate commit `3b5fe45` says in its message
 that it was made with Claude, so `git log` shows where AI was used. Per file:
+
+<details>
+<summary>Every file written with an AI tool</summary>
 
 - Scaffolding in commit `3b5fe45` ("boilerplate using claude"): the initial `backend/`, `contracts/`, `demo/`, `pipeline/` (a Rust stub, replaced by the TypeScript pipeline in V2), `signer/` and `web/` stubs, the root `.gitignore` and the submodule setup.
 - `pipeline/src/config.ts`, `rpc.ts`, `builder.ts`, `signer.ts`, `leaves.ts`, `submit.ts`, `index.ts`
@@ -919,7 +596,9 @@ that it was made with Claude, so `git log` shows where AI was used. Per file:
 - The MetaMask Flask Snap (Nov 6): `snap/src/index.tsx`, `src/fake-chain.ts`, `test/snap.test.js`, `test/esm-to-cjs.cjs`, `snap.manifest.json`, `snap.config.ts`, `package.json`, `tsconfig.json`, `jest.config.js`, `.gitignore`, and the page's first version (`site/index.html`, `site/app.js`, `site/style.css`, `site/serve.ts`)
 - The Snap page's interface refinement (Nov 6), written with OpenAI coding assistant at Vicky's request: `snap/site/index.html`, `style.css`, the presentation additions in `app.js`, and the static-asset allowlist and local-font CSP in `serve.ts`; shared design assets copied from the main workspace as `theme.css`, `workspace.css`, `shell.js` and `activity.js`. The design is not final
 - Sending from MetaMask itself through an ERC-4337 envelope (Nov 6, approved by Vicky; Claude Code researched MetaMask's source and ran a throwaway spike outside this repository first): `pipeline/src/userop.ts` (the envelope and `checkUserOpTx`), `signPrepared` in `pipeline/src/submit.ts`, the export in `pipeline/src/core.ts`, and `pipeline/test/userop.test.ts`; every file in `bundler/` (`src/bundler.ts`, `src/main.ts`, `test/bundler.test.ts`, `package.json`, `bun.lock`, `tsconfig.json`, `.gitignore`); in `snap/`, the Account Snap keyring in `src/index.tsx`, the `endowment:keyring` and `snap_manageAccounts` permissions, the MetaMask tests in `test/snap.test.js`, and step 4 of the page (`site/index.html`, `site/app.js`, `site/serve.ts`'s CSP)
-- This README (Nov 6): written with Claude Code from the measured runs, the code and Vicky's notes, and edited by Vicky. The Day-0 probe scripts, kept outside this repository, were also written with Claude Code
+- This README and `docs/` (Nov 6): written with Claude Code from the measured runs, the code and Vicky's notes, and edited by Vicky; restructured on Nov 6, 22:45 IST, at Vicky's request, after the README of her own Hanvil and of ETHOnline winners, with the long material moved word for word into `docs/design.md`, `docs/gas.md`, `docs/parallel-lanes.md` and `docs/devnet-evidence.md`. The Day-0 probe scripts, kept outside this repository, were also written with Claude Code
+
+</details>
 
 Not written by us: `pipeline/src/codec/codec.ts` and `pipeline/src/codec/FrameTx.ts` are copied from [mempool-workshop-sidecar](https://github.com/forshtat/mempool-workshop-sidecar) at commit `2e22ff0a`, MIT, Copyright (c) 2023 Etherspot; Claude Code added only the header comments and changed one import path. `fakechain/src/sidecarRules.ts` ports the sidecar's admission rules (classifyFrame, recognizeValidationPrefix, validateStructuralRules, validateSignature, describeStructuredFailure) from the same commit, MIT, Copyright (c) 2023 Etherspot, so the fake refuses with the sidecar's own words. The fonts in `web/public/fonts/`, Archivo (`archivo-latin.woff2`) and Besley (`besley-latin.woff2`), are from Google Fonts under the SIL Open Font License 1.1, Copyright 2020 The Archivo Project Authors and The Besley Project Authors; their licences are beside them (`OFL-Archivo.txt`, `OFL-Besley.txt`). `snap/site/fonts/` holds copies of the same two fonts and licence files.
 
