@@ -1,4 +1,4 @@
-// Winterlock's React entry. 
+// Winterlock's React entry.
 import {
   Component,
   Suspense,

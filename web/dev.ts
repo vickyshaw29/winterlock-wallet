@@ -1,4 +1,4 @@
-// Start the React/Vite development server on loopback. 
+// Start the React/Vite development server on loopback.
 import { createServer } from "vite";
 const server = await createServer();
 await server.listen();
