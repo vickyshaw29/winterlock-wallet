@@ -10,6 +10,19 @@ import { writeJsonAtomic } from "./files.ts";
 /** Shared interfaces 5, transaction status values (Nov 6). */
 export type TxStatus = "Submitted" | "OnChain" | "Reverted" | "Included" | "Expired" | "Refused" | "Unknown";
 
+/**
+ * How the signer ground this transaction's message until its WOTS+ chain work fit the declared verify limit (spec
+ * "Expected cost", the gas gauge of demo 4; Nov 6, Vicky): the field it varied, the chain steps of the message it
+ * signed, the most chain steps the declared limit allows, and the chain steps of every message tried, in order (the
+ * last is the one signed).
+ */
+export interface TxGrind {
+  field: "maxFeePerGas" | "lastFrameGas";
+  steps: number;
+  maxSteps: number;
+  tries: number[];
+}
+
 export interface TxRecord {
   txHash: Hex;
   status: TxStatus;
@@ -47,14 +60,16 @@ export interface TxRecord {
    * sent to the node), from the pipeline's onSend; null when nothing was sent. GET /tx/:hash only, never the txs list
    */
   wire: unknown | null;
+  /** the grinding that fixed this transaction's message (Nov 6, Vicky); null when it was not ground or not recorded */
+  grind: TxGrind | null;
   createdAt: string;
   updatedAt: string;
 }
 
 /** The defaults every new record starts from; a record read from an older store gets the ones it lacks. */
-const DEFAULTS_OF_NEW = { maxCostWei: null, wire: null } as const;
+const DEFAULTS_OF_NEW = { maxCostWei: null, wire: null, grind: null } as const;
 
-export const newRecord = (r: Omit<TxRecord, "explorerUrl" | "receipt" | "simulation" | "admission" | "timeline" | "retryOf" | "retriedAs" | "detail" | "createdAt" | "updatedAt" | "nonceSeq" | "maxCostWei" | "wire"> & Partial<TxRecord>): TxRecord => {
+export const newRecord = (r: Omit<TxRecord, "explorerUrl" | "receipt" | "simulation" | "admission" | "timeline" | "retryOf" | "retriedAs" | "detail" | "createdAt" | "updatedAt" | "nonceSeq" | "maxCostWei" | "wire" | "grind"> & Partial<TxRecord>): TxRecord => {
   const now = new Date().toISOString();
   return {
     explorerUrl: explorerTxUrl(r.txHash), receipt: null, simulation: { verifyGas: null, violations: [] }, admission: null,

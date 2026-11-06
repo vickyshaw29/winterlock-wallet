@@ -189,6 +189,25 @@ describe("GET /wallets and GET /wallets/:address", () => {
     expect(r.body).toEqual([{ address: a, epoch: 0, height: 4, balanceWei: "20000000000000000" }]);
   });
 
+  test("the list leaves out wallets that can never sign here (Nov 6, Vicky): a seed pinned before a reset, an address with no code", async () => {
+    const live = await h.wallet(), reset = await h.wallet(), gone = await h.wallet();
+    const pinFile = `${h.record(reset).tree.seedFile}.chain.json`;
+    const pin = JSON.parse(fs.readFileSync(pinFile, "utf8"));
+    fs.writeFileSync(pinFile, JSON.stringify({ ...pin, genesisHash: `0x${"0b".repeat(32)}` })); // pinned on the chain before a reset
+    h.chain.accounts.delete(gone.toLowerCase()); // no code at the address on this chain
+    const listed = async () => ((await h.req("GET", "/wallets")).body as any[]).map((w) => w.address).sort();
+    expect(await listed()).toEqual([live]);
+    expect(await listed()).toEqual([live]);
+    const said = h.logs.filter((l) => l.startsWith("GET /wallets leaves out"));
+    expect(said.length).toBe(2); // each said once, however often the list is read
+    expect(said.find((l) => l.includes(reset))).toContain("was reset");
+    expect(said.find((l) => l.includes(gone))).toContain("no code on this chain");
+    expect(fs.readFileSync(pinFile, "utf8")).toContain("0b0b0b"); // read only: the pin is never rewritten
+    // a pin that cannot be read decides nothing: the wallet stays listed, and signing will say what is wrong
+    fs.writeFileSync(pinFile, "not json");
+    expect(await listed()).toEqual([live, reset].sort());
+  });
+
   test("the wallet: values from the chain, counts from the journals, no tickets yet", async () => {
     const a = await h.wallet();
     const r = await h.req("GET", `/wallets/${a.toLowerCase()}`);

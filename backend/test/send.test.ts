@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import type { Address, Hex } from "viem";
-import { DEFAULTS, LeafJournal, gateway, node, nonceKeyFor } from "../../pipeline/src/index.ts";
+import { DEFAULTS, LeafJournal, frameGasModel, fromWire, gateway, node, nonceKeyFor } from "../../pipeline/src/index.ts";
 import { MARKET, answered, lost } from "./fake-chain.ts";
 import { Harness, OTHER, TARGET, missShortDeadlines, until } from "./helpers.ts";
 
@@ -36,6 +36,23 @@ describe("keyed sends", () => {
     expect(h.chain.balance(TARGET)).toBe(1000n);
     expect(journalLeaves().map((l) => [l.leaf, l.status])).toEqual([[1, "onchain"]]);
     expect(h.chain.sent[0]!.frames[1]!.limits.execution).toBe(90_000n); // the declared verify limit (spec: at most 90k)
+  });
+
+  test("the gas columns and the grinding (Nov 6, Vicky): on GET /tx/:hash and on the lane board", async () => {
+    const r = await send({ to: TARGET, valueWei: "1000" });
+    const tx = await h.settle(r.body.txHash);
+    const m = frameGasModel(fromWire(tx.wire));
+    expect(tx.gas).toEqual({
+      declaredVerifyGas: "90000", verifyGas: tx.simulation.verifyGas, intrinsicGas: m.intrinsic.toString(),
+      floorGas: (m.mandatory + m.floor).toString(), billedBytes: Number(m.bytes), gasUsed: BigInt(tx.receipt.gasUsed).toString(),
+    });
+    expect(Number(tx.gas.floorGas)).toBeGreaterThan(Number(tx.gas.intrinsicGas)); // the 2,000-byte signature entry sets the floor
+    expect(tx.grind.field).toBe("maxFeePerGas");
+    expect(tx.grind.steps).toBeLessThanOrEqual(tx.grind.maxSteps);
+    expect(tx.grind.tries.at(-1)).toBe(tx.grind.steps);
+    expect(tx.grind.tries.slice(0, -1).every((s: number) => s > tx.grind.maxSteps)).toBe(true);
+    const [row] = (await h.req("GET", `/wallets/${a}/txs`)).body;
+    expect([row.txHash, row.wire, row.gas, row.grind]).toEqual([tx.txHash, undefined, tx.gas, tx.grind]);
   });
 
   test("lanes in parallel: four sends at once take four leaves and four keys, and all land", async () => {
@@ -144,7 +161,11 @@ describe("keyed sends", () => {
     expect([r.status, r.body.error, r.body.leaf]).toEqual([422, "refused", 1]);
     expect(r.body.simulation).toEqual({ verifyGas: "60000", violations: ["frame 2 reverted", "account: out of funds"] });
     expect(journalLeaves().map((l) => [l.leaf, l.status])).toEqual([[1, "burned"]]);
-    expect((await h.req("GET", `/tx/${r.body.txHash}`)).body).toMatchObject({ status: "Refused", leaf: 1, mode: "keyed", detail: expect.stringContaining("preflight refused") });
+    const refused = (await h.req("GET", `/tx/${r.body.txHash}`)).body;
+    expect(refused).toMatchObject({ status: "Refused", leaf: 1, mode: "keyed", detail: expect.stringContaining("preflight refused") });
+    // it was ground before the dry run refused it; nothing was sent, so no JSON to price and no receipt
+    expect(refused.grind.steps).toBeLessThanOrEqual(refused.grind.maxSteps);
+    expect(refused.gas).toEqual({ declaredVerifyGas: null, verifyGas: "60000", intrinsicGas: null, floorGas: null, billedBytes: null, gasUsed: null });
     expect(h.chain.sent.length).toBe(0);
   });
 

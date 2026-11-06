@@ -575,7 +575,7 @@ describe("onSubmitted (for the backend, Nov 6)", () => {
     const calls: any[] = [];
     let atCall: any, headAtCall = 0n;
     const r = await sendKeyed(base({ onSubmitted: (s) => { calls.push(s); atCall = { ...journal.get(s.leaf) }; headAtCall = chain.head; } }));
-    expect(calls).toEqual([{ leaf: r.leaf, nonceKey: r.nonceKey, txHash: r.txHash, deadline: r.deadline, altHashes: [], accepted: true, simulation: null }]);
+    expect(calls).toEqual([{ leaf: r.leaf, nonceKey: r.nonceKey, txHash: r.txHash, deadline: r.deadline, altHashes: [], accepted: true, simulation: null, grind: null }]);
     expect(atCall.status).toBe("submitted");
     expect(headAtCall).toBe(sends[0]!.at); // no block was polled between the send and the call
     expect(r.outcome).toBe("OnChain");
@@ -588,6 +588,25 @@ describe("onSubmitted (for the backend, Nov 6)", () => {
     const r = await sendKeyed(base({ preflight: true, onSubmitted: (s) => calls.push(s) }));
     expect(calls.map((c) => c.simulation)).toEqual([dryRun]);
     expect(r.simulation as unknown).toEqual(dryRun);
+  });
+
+  test("a ground send hands its grinding over at submission, the same the result carries (the gas gauge, Nov 6)", async () => {
+    const calls: any[] = [];
+    const tight = { baseGas: 90_000 - 470 * 66.1, gasPerStep: 66.1 };
+    const r = await sendKeyed(base({ grind: tight, onSubmitted: (s) => calls.push(s) }));
+    expect(calls.length).toBe(1);
+    expect(calls[0].grind).toEqual(r.grind);
+    expect(calls[0].grind.tries.at(-1).steps).toBe(r.grind!.steps);
+  });
+
+  test("a refusal after grinding carries the grinding of the refused transaction", async () => {
+    n.simulate = async () => { throw answered("ethrex_simulateFrameTransaction", -32000, "Insufficient max fee per gas"); };
+    const tight = { baseGas: 90_000 - 470 * 66.1, gasPerStep: 66.1 };
+    const err = await sendKeyed(base({ preflight: true, grind: tight })).catch((e) => e);
+    expect(err).toBeInstanceOf(PreflightRefused);
+    expect(err.grind.field).toBe("maxFeePerGas");
+    expect(err.grind.steps).toBeLessThanOrEqual(err.grind.maxSteps);
+    expect(err.grind.tries.at(-1).steps).toBe(err.grind.steps);
   });
 
   test("a lost answer: accepted is false, and the transaction is still followed to its end", async () => {

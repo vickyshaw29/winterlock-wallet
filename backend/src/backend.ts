@@ -29,12 +29,13 @@ import {
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import {
-  DEFAULTS, DEVNET, FACTORY_ABI, GRIND, LeafJournal, PreflightRefused, RetryStopped, SIG_SCHEME, SendError, SubmissionRefused, TicketDevice,
-  admissionReport, buildFrameTx, checkCli, checkSystemContracts, createAccountCalldata, cutStart, estimateCalls, exportTickets, frameTxHash, fromWire,
-  gateway, hashEntryLength, laneCost, node, nonceKeyFor, pinFileFor, pinOrCheckChain, planLanes, predictAccountAddress, proxyRuntimeCode,
-  receiptSucceeded, relayConfig, sendKeyed, sendWithRetry, settleSubmitted, ticketFilesOf, withEstimates, type AccountParams, type Call,
-  type FrameTxReceipt, type HashSigner, type JournalIdentity, type LeafRecord, type RelayConfig, type SendKeyedParams, type SendKeyedResult,
-  type SignatureSlot, type SimulationResult, type SubmittedInfo,
+  ChainChanged, DEFAULTS, DEVNET, FACTORY_ABI, FRAME_MODE, GRIND, LeafJournal, PreflightRefused, RetryStopped, SIG_SCHEME, SendError, SubmissionRefused,
+  TicketDevice, admissionReport, buildFrameTx, checkChainPin, checkCli, checkSystemContracts, createAccountCalldata, cutStart, estimateCalls,
+  exportTickets, frameGasModel, frameTxHash, fromWire, gateway, hashEntryLength, laneCost, node, nonceKeyFor, pinFileFor, pinOrCheckChain,
+  planLanes, predictAccountAddress, proxyRuntimeCode, receiptSucceeded, relayConfig, sendKeyed, sendWithRetry, settleSubmitted, ticketFilesOf,
+  withEstimates, type AccountParams, type Call, type ChainIdentity, type ChainPin, type FrameTxReceipt, type GrindInfo, type HashSigner,
+  type JournalIdentity, type LeafRecord, type RelayConfig, type SendKeyedParams, type SendKeyedResult, type SignatureSlot,
+  type SimulationResult, type SubmittedInfo,
 } from "../../pipeline/src/index.ts";
 import { Keyring, keyringSigner, loadOrCreateSeed } from "../../pipeline/src/hashsig/keyring.ts";
 import { journalFile } from "../../pipeline/scripts/lib/wallet.ts";
@@ -43,7 +44,7 @@ import { ACCOUNT_ABI, NEW_ACCOUNT_STATE_GAS, accountViews, eth, isEmptyAccount, 
 import { Mutex, message, sleep } from "./files.ts";
 import { HttpError, check, errorResponse, fields, json, mapError, queryFields, queryNumber, simulationView, type Mode } from "./http.ts";
 import { Registry, chainsOf, currentTree, epochsOf, type TreeState, type Wallet, type WalletRecord } from "./registry.ts";
-import { TxStore, newRecord, type TxRecord, type TxStatus } from "./store.ts";
+import { TxStore, newRecord, type TxGrind, type TxRecord, type TxStatus } from "./store.ts";
 
 /** The spec's ceiling for the declared verify limit (Transaction format; Level A). */
 export const VERIFY_GAS = 90_000n;
@@ -120,6 +121,8 @@ export class Backend {
   private watchers = new Map<string, Promise<void>>();
   /** the sidecar's relay settings by URL, one read per cfg.relayCacheMs for every lanes plan; `at` is null while it runs */
   private relays = new Map<string, { at: number | null; read: Promise<RelayConfig> }>();
+  /** wallets GET /wallets left out, by address and reason, so the log says each once */
+  private hidden = new Set<string>();
   private readonly closing = Promise.withResolvers<void>();
   private readonly eoaLock = new Mutex();
   private readonly createLock = new Mutex();
@@ -496,7 +499,7 @@ export class Backend {
         const rec = newRecord({
           txHash: s.txHash, status: "Submitted", wallet: o.w.address, kind: o.kind, leaf: s.leaf, nonceKey: toHex(s.nonceKey),
           mode: o.mode, mempool: o.mempool, to: o.to, valueWei: o.value.toString(), deadline: s.deadline, retryOf: previous,
-          maxCostWei: maxCostOf(s.simulation, wire), wire,
+          maxCostWei: maxCostOf(s.simulation, wire), wire, grind: grindView(s.grind),
         });
         rec.timeline.push({ status: s.accepted ? "Submitted" : "Submitted (the mempool's answer was lost: followed by its key)", at: rec.createdAt });
         safely("submitted", () => {
@@ -584,7 +587,7 @@ export class Backend {
       txHash: err.txHash, status: "Refused", wallet: o.w.address, kind: o.kind, leaf: err.leaf, nonceKey: toHex(err.nonceKey),
       mode: o.mode, mempool: o.mempool, to: o.to, valueWei: o.value.toString(), deadline: err.deadline, retryOf,
       detail: err.message, admission: err.admission, simulation: simulationView(err.simulation, null, err.admission, err.cause),
-      maxCostWei: maxCostOf(err.simulation, wire), wire,
+      maxCostWei: maxCostOf(err.simulation, wire), wire, grind: grindView(err.grind),
     });
     rec.timeline.push({ status: err instanceof PreflightRefused ? "Refused by the node's dry run" : "Refused at submission", at: rec.createdAt });
     this.store.put(rec);
@@ -948,15 +951,31 @@ export class Backend {
     return { chainId: Number(id), head: Number(head.number), headAgeSeconds: age, stalled: Math.abs(age) > DEFAULTS.maxClockSkewSeconds, fake: id === FAKE_CHAIN_ID };
   }
 
-  /** GET /wallets: every wallet with its record's epoch and height and its balance. */
+  /**
+   * GET /wallets: every wallet on this chain, with its record's epoch and height and its balance. A wallet that can
+   * never sign here is left out (Nov 6, Vicky): its seed is pinned to another chain (a devnet reset; the pin refuses
+   * every signature), or its address has no code on this chain. A pin that cannot be read keeps the wallet listed.
+   */
   async listWallets() {
     this.registry.load();
     const ws = this.registry.list();
-    const balances = await Promise.all(ws.map((w) => node.balance(w.address)));
-    return ws.map((w, i) => {
+    const [now, reads] = await Promise.all([
+      eth.chainIdentity(),
+      Promise.all(ws.map((w) => Promise.all([node.balance(w.address), node.code(w.address)]))),
+    ]);
+    const out: { address: Address; epoch: number; height: number; balanceWei: string }[] = [];
+    ws.forEach((w, i) => {
+      const [balance, code] = reads[i]!;
+      const gone = pinnedElsewhere(w, now) ?? (code === "0x" ? "it has no code on this chain" : null);
+      if (gone) {
+        const key = `${w.address.toLowerCase()}:${gone}`;
+        if (!this.hidden.has(key)) { this.hidden.add(key); this.log(`GET /wallets leaves out ${w.address}: ${gone}`); }
+        return;
+      }
       const t = currentTree(w.record);
-      return { address: w.address, epoch: t.epoch, height: t.height, balanceWei: balances[i]!.toString() };
+      out.push({ address: w.address, epoch: t.epoch, height: t.height, balanceWei: balance.toString() });
     });
+    return out;
   }
 
   /** Every journal of every wallet that can be opened now, for lookups by hash. */
@@ -983,25 +1002,29 @@ export class Backend {
     return { ...rec, kind: null, mempool: null, to: null, valueWei: null } as unknown as TxRecord;
   }
 
-  /** GET /tx/:hash: the store's record, else the journal's, with the receipt and admission report read live. */
-  async txView(hash: string): Promise<TxRecord> {
+  /**
+   * GET /tx/:hash: the store's record, else the journal's, with the receipt and admission report read live, and its
+   * gas columns (gasView) worked out from the JSON sent and the receipt.
+   */
+  async txView(hash: string): Promise<TxView> {
     const stored = this.store.get(hash);
-    if (stored) return stored;
+    if (stored) return { ...stored, gas: gasView(stored) };
     for (const { w, j, mode } of this.allJournals()) {
       const r = j.all().find((x) => x.txHash?.toLowerCase() === hash.toLowerCase());
       if (!r) continue;
       const receipt = r.status === "onchain" ? await readReceipt(r.txHash!) : null;
       const admission = await admissionReport(r.txHash!).catch(() => null);
-      return this.journalView(w, r, mode, receipt, admission);
+      const rec = this.journalView(w, r, mode, receipt, admission);
+      return { ...rec, gas: gasView(rec) };
     }
     throw new HttpError(404, "unknown_tx", `no transaction ${hash} in the store or in any journal`);
   }
 
   /**
    * GET /wallets/:address/txs: the lane board, newest first; journal-only lanes (e.g. from scripts) included. Each
-   * record carries maxCostWei but not wire, the JSON sent, which only GET /tx/:hash returns.
+   * record carries maxCostWei and its gas columns but not wire, the JSON sent, which only GET /tx/:hash returns.
    */
-  walletTxs(address: string): Omit<TxRecord, "wire">[] {
+  walletTxs(address: string): Omit<TxView, "wire">[] {
     const w = this.wallet(address);
     const out = this.store.forWallet(w.address);
     const known = new Set(out.map((t) => t.txHash.toLowerCase()));
@@ -1014,7 +1037,7 @@ export class Backend {
     }
     return out
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
-      .map(({ wire: _wire, ...rest }) => rest);
+      .map(({ wire, ...rest }) => ({ ...rest, gas: gasView({ ...rest, wire }) }));
   }
 
   /**
@@ -1381,6 +1404,65 @@ function maxCostOf(sim: SimulationResult | null | undefined, wire: unknown): str
     try { return laneCost(fromWire(wire as Parameters<typeof fromWire>[0])).gasCostWei.toString(); } catch { /* not a transaction */ }
   }
   return null;
+}
+
+/**
+ * Why a wallet's seed can never sign on the chain `now`, from the pin beside its seed, or null: no pin yet (it never
+ * signed), a pin of this chain, or a pin that cannot be read (the signer then says what is wrong). Read-only: unlike
+ * pinOrCheckChain, it never writes a pin.
+ */
+export function pinnedElsewhere(w: Pick<Wallet, "record">, now: ChainIdentity): string | null {
+  let pin: ChainPin;
+  try { pin = JSON.parse(fs.readFileSync(pinFileFor(w.record.tree.seedFile), "utf8")) as ChainPin; } catch { return null; }
+  try { checkChainPin(pin, now); } catch (e) { return e instanceof ChainChanged ? `its seed's chain pin refuses this chain: ${message(e)}` : null; }
+  return null;
+}
+
+/** The pipeline's grinding as a record keeps it: each try's chain steps only (its value is the start plus its index). */
+export function grindView(g: GrindInfo | null | undefined): TxGrind | null {
+  return g ? { field: g.field, steps: g.steps, maxSteps: g.maxSteps, tries: g.tries.map((t) => t.steps) } : null;
+}
+
+/**
+ * The spec's four gas columns of one transaction (README "Gas"; Nov 6, Vicky), in decimal gas, each null when it
+ * cannot be known: nothing was sent (no JSON), or nothing was included (no receipt).
+ */
+export interface TxGas {
+  /** the self_verify frame's limits.execution in the JSON sent: what the transaction declared for verification */
+  declaredVerifyGas: string | null;
+  /** the self_verify frame's execution gas: from the receipt once included, else from the node's dry run */
+  verifyGas: string | null;
+  /** ethrex's intrinsic gas (frameGasModel): 12,000 + 475 per frame + 6,000 per value frame + signature schemes + 4 or 16 per billed byte, signature bytes included */
+  intrinsicGas: string | null;
+  /** the calldata floor's side of ethrex's billing: the same mandatory part + 64 per billed byte (EIP-7976) */
+  floorGas: string | null;
+  /** the bytes billed: every frame's data, every signature's signer, msg and bytes, and the nonce fields' RLP */
+  billedBytes: number | null;
+  /** the receipt's gasUsed: what the payer was charged for, max(execution, floor) plus state */
+  gasUsed: string | null;
+}
+
+export type TxView = TxRecord & { gas: TxGas };
+
+export function gasView(r: Pick<TxRecord, "wire" | "receipt" | "simulation">): TxGas {
+  const out: TxGas = { declaredVerifyGas: null, verifyGas: r.simulation?.verifyGas ?? null, intrinsicGas: null, floorGas: null, billedBytes: null, gasUsed: null };
+  try { if (r.receipt?.gasUsed) out.gasUsed = BigInt(r.receipt.gasUsed).toString(); } catch { /* not a number: leave it out */ }
+  if (!r.wire) return out;
+  try {
+    const tx = fromWire(r.wire as Parameters<typeof fromWire>[0]);
+    // self_verify: the VERIFY frame that approves (flags bits 0-1); a leading expiry frame is VERIFY with scope 0
+    const i = tx.frames.findIndex((f) => f.mode === FRAME_MODE.VERIFY && (f.flags & 0x3) !== 0);
+    if (i >= 0) {
+      out.declaredVerifyGas = tx.frames[i]!.limits.execution.toString();
+      const used = r.receipt?.frameReceipts?.[i]?.gasUsed?.execution;
+      if (used !== undefined) out.verifyGas = BigInt(used).toString();
+    }
+    const m = frameGasModel(tx);
+    out.intrinsicGas = m.intrinsic.toString();
+    out.floorGas = (m.mandatory + m.floor).toString();
+    out.billedBytes = Number(m.bytes);
+  } catch { /* not a transaction this model prices (recent-root references): the rest stays null */ }
+  return out;
 }
 
 /**
