@@ -1,0 +1,11 @@
+# Winterlock account: Yul implementation (yul/, built by scripts/build.sh) and the Solidity factory (src/).
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["../contracts/lib"]
+solc_version = "0.8.38"
+via_ir = true
+optimizer = true
+remappings = ["forge-std/=../contracts/lib/forge-std/src/", "hashsigs/=../contracts/lib/hashsigs-solidity/contracts/"]
+fs_permissions = [{ access = "read", path = "./build" }, { access = "read", path = "../pipeline/test/fixtures" }, { access = "read", path = "../vectors" }]
