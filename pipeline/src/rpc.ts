@@ -2,7 +2,7 @@
 // callers see every error with its code.
 // Written with Claude Code (AI) for Vicky; after the Nov 6 review an error says whether the server answered.
 import type { Address, Hex } from "viem";
-import { DEVNET } from "./config.ts";
+import { DEVNET, MIN_TIP_WEI } from "./config.ts";
 import { encodeRawFrameTx } from "./codec/codec.ts";
 import type { FrameTransaction } from "./codec/FrameTx.ts";
 
@@ -216,13 +216,29 @@ export function simulationVerdict(r: SimulationResult): { ok: boolean; reason: s
 export type RpcUrl = string | (() => string);
 const urlOf = (u: RpcUrl) => (typeof u === "string" ? u : u());
 
-/** A sidecar gateway client: the alt mempool. */
-export function createGateway(url: RpcUrl, transport: RpcTransport = {}) {
+export interface GasQuote { maxFeePerGas: Hex; maxPriorityFeePerGas: Hex }
+
+/**
+ * A fee quote with a tip floor applied (spec "Fees", Nov 6): a tip below the floor is raised to it, and the max fee by
+ * the same amount, so the room the quote left for the base fee stays the same. A quote at or above the floor is kept.
+ */
+export function withTipFloor(q: GasQuote, floor: bigint): GasQuote {
+  const tip = BigInt(q.maxPriorityFeePerGas);
+  if (tip >= floor) return q;
+  const hex = (n: bigint) => `0x${n.toString(16)}` as Hex;
+  return { maxFeePerGas: hex(BigInt(q.maxFeePerGas) + (floor - tip)), maxPriorityFeePerGas: hex(floor) };
+}
+
+/**
+ * A sidecar gateway client: the alt mempool. `minTipWei` is the tip floor its gasPrice applies (withTipFloor), so
+ * sends, plans and the backend all price lanes alike; 0 keeps the sidecar's quote as it is.
+ */
+export function createGateway(url: RpcUrl, transport: RpcTransport = {}, minTipWei = 0n) {
   const ask = <T>(method: string, params: unknown[] = []) => rpc<T>(urlOf(url), method, params, transport);
   return {
     /** Any method, raw: for the calls without a helper below. */
     request: <T = any>(method: string, params: unknown[] = []) => ask<T>(method, params),
-    gasPrice: () => ask<{ maxFeePerGas: Hex; maxPriorityFeePerGas: Hex }>("skandha_getGasPrice"),
+    gasPrice: async () => withTipFloor(await ask<GasQuote>("skandha_getGasPrice"), minTipWei),
     send: (tx: FrameTransaction) => ask<Hex>("eth_sendFrameTransaction", [toWire(tx)]),
     /**
      * The sidecar's status for a hash, or null when it answers that it holds no such transaction (a deliberate
@@ -292,6 +308,6 @@ export type GatewayClient = ReturnType<typeof createGateway>;
 export type NodeClient = ReturnType<typeof createNode>;
 
 /** The default sidecar gateway: DEVNET.gateway, read at every call. */
-export const gateway: GatewayClient = createGateway(() => DEVNET.gateway);
+export const gateway: GatewayClient = createGateway(() => DEVNET.gateway, {}, MIN_TIP_WEI);
 /** The default ethrex node: DEVNET.node, read at every call. */
 export const node: NodeClient = createNode(() => DEVNET.node);

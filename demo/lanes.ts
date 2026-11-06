@@ -17,13 +17,15 @@ import path from "node:path";
 import { ONE_LANE_SECONDS, explainAccountReason, explainRefusal, type RefusalExplained } from "../pipeline/src/lanes.ts";
 
 export const USAGE = `lanes: parallel lanes through the backend (WL_BACKEND_URL, default http://127.0.0.1:8787)
-  bun lanes.ts plan  --wallet 0x… --n N [--mode keyed|hot] [--value-wei W] [--to 0x…]
-  bun lanes.ts burst --wallet 0x… --n N [--mempool alt|public] [--mode keyed|hot] [--value-wei W] [--to 0x…] [--force] [--json-out DIR]
+  bun lanes.ts plan  --wallet 0x… --n N [--mode keyed|hot] [--value-wei W] [--to 0x…] [--expiry-seconds S]
+  bun lanes.ts burst --wallet 0x… --n N [--mempool alt|public] [--mode keyed|hot] [--value-wei W] [--to 0x…] [--expiry-seconds S] [--force] [--json-out DIR]
     --n          lanes sent at once, 1 to 64
     --mode       keyed (cold leaves, the default) or hot (the wallet's tickets)
     --value-wei  each lane's value, in wei (default 0)
     --to         each lane's recipient (default: the account's allowed target)
     --mempool    alt (the sidecar, the default) or public (the node's own pool)
+    --expiry-seconds  each lane's deadline, 10 to 3600 s (default 180: 8 lanes need 2 relay passes, each lane up to
+                 4 pushes of 10 s, so 90 s left no margin on the devnet; spec "Fees", Nov 6)
     --force      send even when the plan says the balance does not cover the lanes
     --json-out   write each lane's sent JSON to DIR/lane-<i>-<hash>.json instead of printing it`;
 
@@ -41,6 +43,8 @@ export interface Args {
   valueWei: string;
   to: string | null;
   mempool: "alt" | "public";
+  /** each lane's deadline, in seconds from signing */
+  expirySeconds: number;
   force: boolean;
   jsonOut: string | null;
 }
@@ -50,11 +54,13 @@ export class UsageError extends Error {}
 export class CliError extends Error {}
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+/** A burst's deadline (spec "Fees", Nov 6): 8 lanes take 2 relay passes and each lane up to 4 pushes of 10 s. */
+export const BURST_EXPIRY_SECONDS = 180;
 
 export function parseArgs(argv: string[]): Args {
   const [command, ...rest] = argv;
   if (command !== "plan" && command !== "burst") throw new UsageError(command === undefined ? "say plan or burst" : `unknown command ${command}: say plan or burst`);
-  const valued = new Set(["--wallet", "--n", "--mode", "--value-wei", "--to", "--mempool", "--json-out"]);
+  const valued = new Set(["--wallet", "--n", "--mode", "--value-wei", "--to", "--mempool", "--json-out", "--expiry-seconds"]);
   const flags = new Map<string, string | true>();
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
@@ -79,7 +85,12 @@ export function parseArgs(argv: string[]): Args {
   if (!/^(0|[1-9]\d*)$/.test(valueWei)) throw new UsageError("--value-wei must be a whole number of wei");
   const to = text("--to") ?? null;
   if (to !== null && !ADDRESS.test(to)) throw new UsageError("--to must be an address (0x and 40 hex digits)");
-  return { command, wallet, n: Number(nText), mode, valueWei, to, mempool, force: flags.has("--force"), jsonOut: text("--json-out") ?? null };
+  const expiryText = text("--expiry-seconds") ?? String(BURST_EXPIRY_SECONDS);
+  if (!/^\d{1,4}$/.test(expiryText) || Number(expiryText) < 10 || Number(expiryText) > 3600) throw new UsageError("--expiry-seconds must be a whole number of seconds from 10 to 3600");
+  return {
+    command, wallet, n: Number(nText), mode, valueWei, to, mempool, expirySeconds: Number(expiryText),
+    force: flags.has("--force"), jsonOut: text("--json-out") ?? null,
+  };
 }
 
 // ------------------------------------------------------------------ the backend
@@ -120,8 +131,8 @@ export interface Plan {
   relay: { bundleSize: number; bundleIntervalSeconds: number; maxSubmitAttempts: number; useropsTTLSeconds: number; bundlingMode: string | null; testingMode: boolean; assumed: boolean; notes: string[] };
 }
 
-export async function fetchPlan(c: Client, a: Pick<Args, "wallet" | "n" | "mode" | "valueWei" | "to">): Promise<Plan> {
-  const q = new URLSearchParams({ n: String(a.n), mode: a.mode, valueWei: a.valueWei });
+export async function fetchPlan(c: Client, a: Pick<Args, "wallet" | "n" | "mode" | "valueWei" | "to" | "expirySeconds">): Promise<Plan> {
+  const q = new URLSearchParams({ n: String(a.n), mode: a.mode, valueWei: a.valueWei, expirySeconds: String(a.expirySeconds) });
   if (a.to) q.set("to", a.to);
   const r = await c.get(`/wallets/${a.wallet}/lanes/plan?${q}`);
   if (r.status !== 200) throw new CliError(`the plan was refused (${r.status} ${r.body?.error}): ${r.body?.detail}`);
@@ -176,6 +187,8 @@ export interface TxView {
   txHash: string; status: string; leaf: number; nonceKey: string; mempool: "alt" | "public" | null;
   timeline: { status: string; at: string }[]; receipt: { blockNumber: string } | null; admission: { summary: string } | null;
   detail: string | null; wire: unknown | null; maxCostWei: string | null; valueWei: string | null; updatedAt: string;
+  /** unix seconds; createdAt is ISO time */
+  deadline: number | null; createdAt: string;
 }
 
 /**
@@ -309,7 +322,7 @@ export async function burst(c: Client, a: Args, o: BurstOptions): Promise<BurstR
     return { ...none, sent: false };
   }
   if (!plan.affordable) o.out("--force: sending although the plan says the balance does not cover every lane");
-  const body = { to: plan.to, valueWei: plan.valueWei, mode: a.mode, mempool: a.mempool };
+  const body = { to: plan.to, valueWei: plan.valueWei, mode: a.mode, mempool: a.mempool, expirySeconds: a.expirySeconds };
   o.out(`sending ${lanesText(plan.n)} at once to the ${a.mempool === "alt" ? "alt mempool (the sidecar)" : "public mempool (the node's own pool)"}, each POST /send ${JSON.stringify(body)}`);
 
   const t0 = Date.now();

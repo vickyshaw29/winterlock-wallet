@@ -5,7 +5,7 @@
 // Every function of the send path takes an optional network and falls back to defaultNetwork: DEVNET (from the WL_*
 // variables) with the module-level gateway and node, the same objects the backend's and pipeline's tests mock. So Node
 // code that passes no network behaves exactly as before.
-import { DEVNET, explorerTxUrl } from "./config.ts";
+import { DEVNET, explorerTxUrl, tipFloorFor } from "./config.ts";
 import { createGateway, createNode, gateway, node, type GatewayClient, type NodeClient, type RpcTransport } from "./rpc.ts";
 
 export interface Network {
@@ -31,6 +31,8 @@ export interface NetworkOptions extends RpcTransport {
   gatewayUrl: string;
   /** default https://explorer.altmempool.wtf */
   explorerUrl?: string;
+  /** the tip floor of gasPrice, in wei (spec "Fees", Nov 6); default tipFloorFor(chainId): 3 gwei on 1337, else 0 */
+  minTipWei?: bigint;
 }
 
 const EXPLORER = "https://explorer.altmempool.wtf";
@@ -48,13 +50,14 @@ export function createNetwork(o: NetworkOptions): Network {
   const explorerUrl = new URL(o.explorerUrl ?? EXPLORER);
   if (explorerUrl.search || explorerUrl.hash) throw new Error(`explorerUrl must have no query or fragment: transaction links are built as <explorerUrl>/tx/<hash>`);
   if (o.fetch !== undefined && typeof o.fetch !== "function") throw new Error("fetch must be a function");
+  if (o.minTipWei !== undefined && (typeof o.minTipWei !== "bigint" || o.minTipWei < 0n)) throw new Error(`minTipWei must be a bigint of at least 0, got ${String(o.minTipWei)}`);
   const timeoutMs = o.timeoutMs ?? NETWORK_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error(`timeoutMs must be a positive number of milliseconds, got ${timeoutMs}`);
   const transport: RpcTransport = { ...(o.fetch ? { fetch: o.fetch } : {}), timeoutMs };
   const explorer = (o.explorerUrl ?? EXPLORER).replace(/\/+$/, "");
   return Object.freeze({
     chainId: o.chainId,
-    gateway: createGateway(o.gatewayUrl, transport),
+    gateway: createGateway(o.gatewayUrl, transport, o.minTipWei ?? tipFloorFor(o.chainId)),
     node: createNode(o.nodeUrl, transport),
     explorerTxUrl: (hash: string) => `${explorer}/tx/${hash}`,
   });
