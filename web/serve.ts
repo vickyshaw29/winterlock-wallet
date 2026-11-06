@@ -22,6 +22,7 @@ const TYPES: Record<string, string> = {
   ".png": "image/png",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8",
 };
 
 /**
@@ -40,6 +41,8 @@ export interface WebOptions {
   /** the backend's base URL, e.g. http://127.0.0.1:8787 */
   backendUrl?: string;
   publicDir?: string;
+  /** Serve the compiled React entry for the four established page URLs only. */
+  spa?: boolean;
   /** how /api/* reaches the backend: the backend's tests replace globalThis.fetch, so tests pass the real one */
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
   log?: (line: string) => void;
@@ -52,6 +55,13 @@ export interface WebServer {
   backendUrl: string;
   stop: () => void;
 }
+
+/** Shared by the production server and Vite middleware, before any proxy headers are removed. */
+export function allowedWebRequest(host: string, origin: string | null, ownHosts: readonly string[]): boolean {
+  return ownHosts.includes(host) && (origin === null || ownHosts.some((name) => origin === `http://${name}`));
+}
+
+export const APP_ROUTES = new Set(["/", "/index.html", "/hot-cold.html", "/agent.html", "/session.html"]);
 
 const errorJson = (status: number, error: string, detail: string) =>
   new Response(JSON.stringify({ error, detail }), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -69,6 +79,7 @@ export function createHandler(opts: WebOptions & { ownPort: () => number; ownHos
   function staticFile(pathname: string, head: boolean): Response {
     let rel: string;
     try { rel = decodeURIComponent(pathname); } catch { return errorJson(400, "bad_request", "the path is not valid percent-encoding"); }
+    if (opts.spa && APP_ROUTES.has(rel)) rel = "/index.html";
     if (rel.includes("\0")) return errorJson(400, "bad_request", "the path holds a NUL byte");
     if (rel.endsWith("/")) rel += "index.html";
     const file = path.resolve(publicDir, `.${rel}`);
@@ -115,7 +126,7 @@ export function createHandler(opts: WebOptions & { ownPort: () => number; ownHos
     const host = req.headers.get("host") ?? url.host;
     if (!own().includes(host)) return errorJson(403, "forbidden", "this server answers only requests addressed to its own host and port");
     const origin = req.headers.get("origin");
-    if (origin !== null && !own().some((h) => origin === `http://${h}`)) return errorJson(403, "forbidden", "cross-origin requests are refused");
+    if (!allowedWebRequest(host, origin, own())) return errorJson(403, "forbidden", "cross-origin requests are refused");
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return api(req, url);
     if (url.pathname === "/web/config") return Response.json({ backendUrl }, { headers: { "cache-control": "no-store" } });
     if (req.method !== "GET" && req.method !== "HEAD") return errorJson(405, "method_not_allowed", `${url.pathname} takes GET`);
@@ -158,12 +169,16 @@ export function startWebServer(opts: WebOptions = {}): WebServer {
 if (import.meta.main) {
   const port = Number(process.env.WL_WEB_PORT ?? "5173");
   if (!Number.isInteger(port) || port < 0 || port > 65_535) throw new Error(`WL_WEB_PORT must be a port number, got ${process.env.WL_WEB_PORT}`);
-  const web = startWebServer({ port, backendUrl: process.env.WL_BACKEND_URL ?? "http://127.0.0.1:8787" });
+  const prototype = process.argv.includes("--prototype");
+  const built = path.join(import.meta.dir, "dist");
+  const reference = path.join(import.meta.dir, "../.claude/ui-reference/public");
+  if (!prototype && !fs.existsSync(path.join(built, "index.html"))) throw new Error("Build the React app first: bun run build (or use --prototype for the reference design).");
+  const web = startWebServer({ port, backendUrl: process.env.WL_BACKEND_URL ?? "http://127.0.0.1:8787", publicDir: prototype ? reference : built, spa: !prototype });
   console.log(`winterlock screens: ${web.url}/ (backend ${web.backendUrl})`);
   const stops = [web.stop];
   if (process.argv.includes("--lan") || process.env.WL_WEB_LAN === "1") {
     const { startLanServer } = await import("./lan.ts");
-    const lan = startLanServer({ port: web.port, backendUrl: web.backendUrl, host: process.env.WL_WEB_LAN_HOST });
+    const lan = startLanServer({ port: web.port, backendUrl: web.backendUrl, host: process.env.WL_WEB_LAN_HOST, publicDir: prototype ? reference : built, spa: !prototype });
     stops.push(lan.stop);
     console.log(`\nLAN mode, for your phone on YOUR OWN hotspot only (never a shared or venue Wi-Fi):\n  ${lan.link}\n` +
       "Anyone who has this link can press the wallet's buttons until you stop this server. A new code every start.");

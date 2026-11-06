@@ -1,6 +1,5 @@
 // A client for every backend endpoint (spec, Shared interfaces 5, extended Nov 6), typed with JSDoc; a failed call
 // throws ApiError carrying the spec's {error, detail} shape and any extra fields (a 422 adds txHash, leaf, simulation).
-// Written with Claude Code (AI) for Vicky.
 
 /**
  * @typedef {Object} WalletSummary GET /api/wallets
@@ -119,6 +118,8 @@
  * @property {string | null} [maxCostWei] decimal wei: what the sidecar sets aside for the lane while it is pending
  *   (spec, Nov 6), when the backend reports it
  * @property {unknown} [wire] the exact JSON sent (GET /api/tx/:hash only)
+ * @property {{ declaredVerifyGas: string | null, verifyGas: string | null, intrinsicGas: string | null, floorGas: string | null, billedBytes: number | null, gasUsed: string | null } | null} [gas] backend-computed gas columns; unknown values remain null
+ * @property {{ field: "maxFeePerGas" | "lastFrameGas", steps: number, maxSteps: number, tries: number[] } | null} [grind] hash work of the messages tried before the one signature was made
  */
 
 /**

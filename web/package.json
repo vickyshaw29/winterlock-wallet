@@ -1,18 +1,45 @@
 {
   "name": "web",
-  "description": "The three use-case screens (hot and cold, agent, session) and serve.ts, which serves them and forwards /api/* to the backend",
+  "description": "Winterlock React and TypeScript wallet, built with Vite; guarded Bun API proxy and static server.",
   "module": "serve.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun serve.ts",
+    "start": "bun run build && bun serve.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p public"
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p public && tsc --noEmit -p tsconfig.app.json",
+    "dev": "bun dev.ts",
+    "build": "vite build",
+    "preview": "bun serve.ts",
+    "prototype": "bun serve.ts --prototype"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "tailwindcss": "^4",
+    "@tailwindcss/vite": "^4",
+    "@playwright/test": "latest",
+    "@axe-core/playwright": "latest",
+    "tw-animate-css": "latest"
   },
   "peerDependencies": {
     "typescript": "^7"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1",
+    "@hookform/resolvers": "^5",
+    "@tanstack/react-query": "^5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "latest",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-hook-form": "^7",
+    "react-router": "^8.5.1",
+    "tailwind-merge": "^3",
+    "zod": "^4"
   }
 }
