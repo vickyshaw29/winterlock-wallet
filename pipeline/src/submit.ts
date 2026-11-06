@@ -16,12 +16,16 @@
 //     and the grind limit are all checked before a leaf is reserved, so a mistake wastes no leaf.
 //   - every failure after the reservation is written on the leaf; sendWithRetry sends the next attempt only after the
 //     sidecar has dropped the dead one, and keeps the attempts it made when it stops.
+//   - for the backend (Nov 6): onSubmitted lets a caller answer once the transaction has left, with the dry run it was
+//     checked with (parallel lanes: its maxCost is the lane's set-aside); mempool "public" sends to the node's own pool
+//     under the same refusal rule; a refusal carries the dry run it was based on; a fee the caller fixed is never
+//     ground (the last frame's limit is), so a stuck payment stays stuck.
 import type { Address, Hex } from "viem";
 import { DEFAULTS, DEVNET, EXPIRY_VERIFIER, EXPIRY_VERIFIER_CODE, NONCE_MANAGER, NONCE_MANAGER_CODE, explorerTxUrl } from "./config.ts";
 import { buildFrameTx, nonceManagerSlot, type Call } from "./builder.ts";
 import { placeholders, signFrameTx, type SignatureSlot } from "./signer.ts";
 import { RpcError, gateway, node, receiptSucceeded, simulationVerdict, toWire, type FrameTxReceipt, type SimulationResult } from "./rpc.ts";
-import { grind, maxStepsFor, type GrindTry } from "./grind.ts";
+import { grind, maxStepsFor, type GrindConfig, type GrindTry } from "./grind.ts";
 import { WOTS } from "./wots.ts";
 import { admissionReport, frameTxHash, type AdmissionReport } from "./admission.ts";
 import type { LeafJournal } from "./leaves.ts";
@@ -197,14 +201,16 @@ export interface SendKeyedParams {
   /** signature entries for the reserved leaf, in order; called before the leaf is reserved and checked against it */
   signatures: (leaf: number) => SignatureSlot[];
   expirySeconds?: number;
-  /** fixed fees instead of skandha_getGasPrice (e.g. a fee below market, to show a stuck payment) */
+  /** fixed fees instead of skandha_getGasPrice (e.g. a fee below market, to show a stuck payment); never ground */
   fees?: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
   /**
    * Grind until the WOTS+ chain work fits verifyGas (cost model: GRIND in config). The field ground is maxFeePerGas,
    * one wei per try, so the deadline stays exact (Vicky's decision, Nov 6); a few thousand wei at most, against fees
-   * of about 2 gwei per gas.
+   * of about 2 gwei per gas. When the caller fixes `fees`, the fee stays exact too and the last SENDER frame's
+   * execution limit moves instead, one gas per try (review, Nov 6: a ground fee climbed past the base fee, so a
+   * stuck payment never stuck).
    */
-  grind?: { baseGas: number; gasPerStep: number; maxTries?: number };
+  grind?: Omit<GrindConfig, "verifyGasLimit">;
   /** run ethrex_simulateFrameTransaction first and stop if it says invalid */
   preflight?: boolean;
   /** fetch the sidecar's admission report after the outcome (default true) */
@@ -217,6 +223,33 @@ export interface SendKeyedParams {
   onStatus?: (status: string) => void;
   /** called with the exact JSON before it is sent, so scripts can print it */
   onSend?: (json: unknown) => void;
+  /**
+   * Where to send: "alt" (default) is the sidecar's eth_sendFrameTransaction; "public" is the node's own pool,
+   * eth_sendRawTransaction. Unverified on the devnet: ethrex's docs say its pool may admit several keyed
+   * transactions with disjoint keys from one sender, so "one pending per sender" may not hold there.
+   */
+  mempool?: "alt" | "public";
+  /**
+   * Called once, right after the submission step and before following, so a caller (the backend) can answer while
+   * the transaction is followed. A throw here is noted on the leaf and changes nothing else.
+   */
+  onSubmitted?: (s: SubmittedInfo) => void;
+}
+
+export interface SubmittedInfo {
+  leaf: number;
+  nonceKey: bigint;
+  txHash: Hex;
+  deadline: number;
+  /** another hash the mempool answered for the same transaction, when it differs */
+  altHashes: Hex[];
+  /** false when the send's answer was lost or unclear: the transaction is then followed by its key */
+  accepted: boolean;
+  /**
+   * the node's dry run of exactly this transaction (preflight), or null without one: its maxCost is what the sidecar
+   * sets aside for the payer while the lane is pending (parallel lanes, Nov 6)
+   */
+  simulation: SimulationResult | null;
 }
 
 export interface SendKeyedResult extends InclusionResult {
@@ -226,8 +259,8 @@ export interface SendKeyedResult extends InclusionResult {
   deadline: number;
   simulation: SimulationResult | null;
   admission: AdmissionReport | null;
-  /** present when the send was ground: the chain steps of the signed message and every maxFeePerGas tried */
-  grind: { steps: number; maxSteps: number; tries: GrindTry<bigint>[] } | null;
+  /** present when the send was ground: the chain steps of the signed message and every value tried of the field ground */
+  grind: { field: "maxFeePerGas" | "lastFrameGas"; steps: number; maxSteps: number; tries: GrindTry<bigint>[] } | null;
 }
 
 export type SendStage = "check" | "prepare" | "sign" | "preflight" | "submit" | "follow";
@@ -239,6 +272,8 @@ export interface SendErrorInfo {
   txHash?: Hex | null;
   deadline?: number | null;
   admission?: AdmissionReport | null;
+  /** the node's dry run, when one ran: a refusal's verify gas and revert reason are in it */
+  simulation?: SimulationResult | null;
   cause?: unknown;
 }
 
@@ -255,6 +290,7 @@ export class SendError extends Error {
   readonly txHash: Hex | null;
   readonly deadline: number | null;
   readonly admission: AdmissionReport | null;
+  readonly simulation: SimulationResult | null;
   constructor(message: string, info: SendErrorInfo) {
     super(message, { cause: info.cause });
     this.stage = info.stage;
@@ -263,6 +299,7 @@ export class SendError extends Error {
     this.txHash = info.txHash ?? null;
     this.deadline = info.deadline ?? null;
     this.admission = info.admission ?? null;
+    this.simulation = info.simulation ?? null;
   }
 }
 /** The node's dry run said the transaction is invalid. Its leaf is burned. */
@@ -316,9 +353,12 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
   }
   // The expiry frame compares against block.timestamp, so the deadline counts from chain time when the host is behind.
   const baseDeadline = Math.max(localNow, chainNow) + expiry;
-  const buildAt = (nonceKey: bigint, slots: SignatureSlot[], maxFeePerGas: bigint) => buildFrameTx({
-    chainId: DEVNET.chainId, sender: p.sender, nonce: { keys: [nonceKey], seq: 0n },
-    verifyGas: p.verifyGas, calls: p.calls, deadline: baseDeadline, fees: { ...fees, maxFeePerGas }, signatures: placeholders(slots),
+  // The last SENDER frame's execution limit, which a fixed-fee send grinds instead of the fee.
+  const lastGas = p.calls.at(-1)?.gas ?? DEFAULTS.transferGas;
+  const buildAt = (nonceKey: bigint, slots: SignatureSlot[], maxFeePerGas: bigint, lastFrameGas = lastGas) => buildFrameTx({
+    chainId: DEVNET.chainId, sender: p.sender, nonce: { keys: [nonceKey], seq: 0n }, verifyGas: p.verifyGas,
+    calls: p.calls.map((c, i) => (i === p.calls.length - 1 ? { ...c, gas: lastFrameGas } : c)),
+    deadline: baseDeadline, fees: { ...fees, maxFeePerGas }, signatures: placeholders(slots),
   });
   const peek = () => {
     try {
@@ -353,9 +393,15 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
       slots = p.signatures(next.leaf);
       checkSlots(slots, next.leaf, j);
       if (p.grind) {
-        const g = grind((i) => { const fee = fees.maxFeePerGas + BigInt(i); return { value: fee, tx: buildAt(next.nonceKey, slots, fee) }; }, { ...p.grind, verifyGasLimit: p.verifyGas });
+        // A fee the caller fixed stays exact (a stuck payment must stay below the base fee): the limit moves instead.
+        const field = p.fees ? "lastFrameGas" : "maxFeePerGas";
+        const g = grind((i) => {
+          if (field === "lastFrameGas") { const gas = lastGas + BigInt(i); return { value: gas, tx: buildAt(next.nonceKey, slots, fees.maxFeePerGas, gas) }; }
+          const fee = fees.maxFeePerGas + BigInt(i);
+          return { value: fee, tx: buildAt(next.nonceKey, slots, fee) };
+        }, { ...p.grind, verifyGasLimit: p.verifyGas });
         unsigned = g.tx;
-        ground = { steps: g.steps, maxSteps: g.maxSteps, tries: g.tries };
+        ground = { field, steps: g.steps, maxSteps: g.maxSteps, tries: g.tries };
       } else {
         unsigned = buildAt(next.nonceKey, slots, fees.maxFeePerGas);
       }
@@ -393,31 +439,48 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
     }
     if (!verdict.ok) {
       j.mark(leaf, "burned", { note: `preflight: ${verdict.reason}` });
-      throw new PreflightRefused(`leaf ${leaf}: preflight refused: ${verdict.reason}`, at("preflight", { txHash, deadline }));
+      throw new PreflightRefused(`leaf ${leaf}: preflight refused: ${verdict.reason}`, at("preflight", { txHash, deadline, simulation }));
     }
   }
 
-  // 4. Journal the hash and deadline, then send. A deliberate refusal for a hash the sidecar does not hold burns the
+  // 4. Journal the hash and deadline, then send. A deliberate refusal for a hash the mempool does not hold burns the
   //    leaf; any other failure (timeout, proxy error, cut connection, a server bug, "already known") leaves the outcome
-  //    unknown, so the transaction is followed like any other.
+  //    unknown, so the transaction is followed like any other. The public pool is asked the same way, by hash.
+  const mempool = p.mempool ?? "alt";
   j.mark(leaf, "submitted", { txHash, deadline });
   p.onSend?.(toWire(signed.tx));
   const altHashes: Hex[] = [];
+  let accepted = true;
   try {
-    const returned = await gateway.send(signed.tx);
+    const returned = mempool === "public" ? await node.sendRawPublic(signed.tx) : await gateway.send(signed.tx);
     if (returned.toLowerCase() !== txHash.toLowerCase()) {
       altHashes.push(returned);
-      j.note(leaf, `the sidecar answered hash ${returned}`);
+      j.note(leaf, `the ${mempool === "public" ? "node" : "sidecar"} answered hash ${returned}`);
     }
   } catch (e) {
     const alreadyKnown = e instanceof RpcError && /already known/i.test(e.message);
-    const held = alreadyKnown ? true : await gateway.status(txHash).then((s) => s !== null, () => undefined);
+    // false only when the mempool answers that it holds no such transaction; undefined when it cannot be asked
+    const held = alreadyKnown ? true : await (mempool === "public"
+      ? node.transactionByHash(txHash).then((t) => t !== null, () => undefined)
+      : gateway.status(txHash).then((s) => s !== null, () => undefined));
     if (e instanceof RpcError && e.refused && held === false) {
       j.mark(leaf, "burned", { note: `refused at submission: ${message(e)}` });
-      const admission = p.admission === false ? null : await admissionReport(txHash).catch(() => null);
-      throw new SubmissionRefused(`leaf ${leaf}: refused at submission: ${message(e)}`, at("submit", { txHash, deadline, admission, cause: e }));
+      // the sidecar never saw a transaction sent to the public pool, so it has no admission record for it
+      const admission = p.admission === false || mempool === "public" ? null : await admissionReport(txHash).catch(() => null);
+      throw new SubmissionRefused(`leaf ${leaf}: refused at submission: ${message(e)}`, at("submit", { txHash, deadline, admission, simulation, cause: e }));
     }
+    accepted = false;
     j.note(leaf, `send outcome unknown (${message(e)}); followed by its key`);
+  }
+  if (p.onSubmitted) {
+    // The caller's bookkeeping must never change what happens to a transaction that has left: note it and go on.
+    const noteFailure = (e: unknown) => { try { j.note(leaf, `onSubmitted failed: ${message(e)}`); } catch { /* the journal is closed */ } };
+    try {
+      const r: unknown = p.onSubmitted({ leaf, nonceKey, txHash, deadline, altHashes: [...altHashes], accepted, simulation });
+      if (r instanceof Promise) r.catch(noteFailure);
+    } catch (e) {
+      noteFailure(e);
+    }
   }
 
   // 5. Follow it to its end.
@@ -435,15 +498,16 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
   else if (result.outcome === "OnChain") j.mark(leaf, "onchain");
   else if (result.outcome === "Reverted") j.mark(leaf, "onchain", { note: frameNote(result.receipt!) });
   else j.mark(leaf, "onchain", { note: `included by block ${result.decidedAt}, but no receipt was readable: which frames succeeded is unknown; read the receipt before paying again` });
-  const admission = p.admission === false ? null : await admissionReport(txHash).catch(() => null);
+  const admission = p.admission === false || mempool === "public" ? null : await admissionReport(txHash).catch(() => null);
   return { ...result, leaf, nonceKey, sigHash: signed.sigHash, deadline, simulation, admission, grind: ground };
 }
 
 /**
  * After a crash: follows every leaf the journal holds as "submitted" to its end, by its key and deadline, and
- * journals the outcome. Leaves without a deadline (written before Nov 6) are reported, not guessed.
+ * journals the outcome. Leaves without a deadline (written before Nov 6) are reported, not guessed. With timeoutMs 0
+ * past the deadline it takes one look and reports "unknown" when the chain cannot decide yet (the backend's re-check).
  */
-export async function settleSubmitted(journal: LeafJournal, opts: Pick<FollowParams, "confirmations" | "pollMs" | "onStatus" | "receiptWaitMs"> = {}) {
+export async function settleSubmitted(journal: LeafJournal, opts: Pick<FollowParams, "confirmations" | "pollMs" | "onStatus" | "receiptWaitMs" | "timeoutMs"> = {}) {
   await checkSystemContracts();
   const out: { leaf: number; outcome: Outcome | "unknown"; detail?: string }[] = [];
   for (const rec of journal.all().filter((r) => r.status === "submitted")) {
@@ -489,14 +553,18 @@ export class RetryStopped extends Error {
 }
 
 /**
- * Waits until the sidecar no longer holds a dead transaction (Cancelled or gone): until then it still counts the
- * transaction's value and gas against the balance, and would refuse a retry that needs the same funds.
+ * Waits until the mempool no longer holds a dead transaction: until then it still counts the transaction's value and
+ * gas against the balance, and would refuse a retry that needs the same funds. The alt mempool's sidecar says
+ * Cancelled or gone; the public pool was never seen by the sidecar, so there the node is asked until it answers null
+ * (review, Nov 6). An error means "ask again".
  */
-async function waitUntilDropped(txHash: Hex, maxMs: number, pollMs: number): Promise<boolean> {
+async function waitUntilDropped(txHash: Hex, maxMs: number, pollMs: number, mempool: "alt" | "public"): Promise<boolean> {
   const until = Date.now() + maxMs;
   for (;;) {
-    const s = await gateway.status(txHash).catch(() => undefined);
-    if (s === null || s === "Cancelled") return true;
+    const dropped = mempool === "public"
+      ? await node.transactionByHash(txHash).then((t) => t === null, () => false)
+      : await gateway.status(txHash).then((s) => s === null || s === "Cancelled", () => false);
+    if (dropped) return true;
     if (Date.now() >= until) return false;
     await sleep(pollMs);
   }
@@ -523,10 +591,11 @@ export async function sendWithRetry(p: RetryParams): Promise<RetryResult> {
     if (i + 1 < max) {
       p.onRetry?.(r, i + 2);
       const waitMs = p.dropWaitMs ?? DEFAULTS.dropWaitMs;
-      if (!(await waitUntilDropped(r.txHash, waitMs, p.pollMs ?? DEFAULTS.pollMs))) {
+      const holder = p.mempool === "public" ? "the node" : "the sidecar";
+      if (!(await waitUntilDropped(r.txHash, waitMs, p.pollMs ?? DEFAULTS.pollMs, p.mempool ?? "alt"))) {
         throw new RetryStopped(
-          `attempt ${i + 1} expired, but after ${waitMs / 1000} s the sidecar still holds it and counts it against the balance; ` +
-            "no retry was sent and no leaf was used. Run again once the sidecar has dropped it.",
+          `attempt ${i + 1} expired, but after ${waitMs / 1000} s ${holder} still holds it and counts it against the balance; ` +
+            `no retry was sent and no leaf was used. Run again once ${holder} has dropped it.`,
           attempts,
         );
       }

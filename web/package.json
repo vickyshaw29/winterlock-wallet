@@ -1,10 +1,13 @@
 {
   "name": "web",
-  "module": "index.ts",
+  "description": "The three use-case screens (hot and cold, agent, session) and serve.ts, which serves them and forwards /api/* to the backend",
+  "module": "serve.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "bun check"
+    "start": "bun serve.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p public"
   },
   "devDependencies": {
     "@types/bun": "latest"

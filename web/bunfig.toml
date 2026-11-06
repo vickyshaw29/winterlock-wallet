@@ -1,0 +1,4 @@
+# bun test settings for the screens: the preload points every chain endpoint at loopback before anything loads.
+# Written with Claude Code (AI) for Vicky.
+[test]
+preload = ["./test/setup.ts"]

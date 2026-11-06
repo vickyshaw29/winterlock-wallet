@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { concat, toHex, type Address, type Hex } from "viem";
 import { buildFrameTx, keyedNonce } from "../src/builder.ts";
-import { frameGasModel, inferStateGas, withEstimates } from "../src/estimate.ts";
+import { estimateCalls, frameGasModel, inferStateGas, withEstimates } from "../src/estimate.ts";
+import { LeafJournal } from "../src/leaves.ts";
+import { RpcError, node } from "../src/rpc.ts";
+import { LeavesExhausted } from "../src/submit.ts";
 import { SIG_SCHEME, type SignatureEntry } from "../src/codec/FrameTx.ts";
 
 // Shape of the research's measured estimates (Nov 6): account, key (0 << 32) | 700, expiry + self_verify + one
@@ -39,5 +45,31 @@ describe("ethrex gas model", () => {
   test("limits are filled into the calls", () => {
     const calls = withEstimates([{ to: ACCOUNT, value: 1n }], [{ used: 100n, execution: 2_610n, state: 183_600n, leaf: 5 }]);
     expect(calls[0]).toEqual({ to: ACCOUNT, value: 1n, gas: 2_610n, stateGas: 183_600n });
+  });
+});
+
+describe("estimateCalls' leaves (review, Nov 6)", () => {
+  test("a failed key read burns its leaf (no phantom lane); a used-up band is LeavesExhausted, never a plain error", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "estimate-"));
+    const j = LeafJournal.open(path.join(dir, "journal.json"), { wallet: ACCOUNT, chainId: 1337n, epoch: 0, height: 4, treeSeed: `0x${"11".repeat(32)}` }, { create: true });
+    const realFetch = globalThis.fetch, realStorage = node.storage;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { baseFeePerGas: "0x7" } }))) as unknown as typeof fetch;
+    node.storage = async () => { throw new RpcError("eth_getStorageAt", undefined, "no response", undefined, "transport"); };
+    const estimate = () => estimateCalls({ journal: j, band: { from: 1, to: 3 }, sender: ACCOUNT, calls: [{ to: ACCOUNT, data: "0x12" }], signatures: () => [] }).catch((e) => e);
+    try {
+      for (const leaf of [1, 2]) {
+        expect(await estimate()).toBeInstanceOf(RpcError);
+        expect(j.get(leaf)).toMatchObject({ status: "burned", note: "estimate only: its key could not be read on chain; never signed" });
+      }
+      const err = await estimate();
+      expect(err).toBeInstanceOf(LeavesExhausted);
+      expect(err.message).toContain("no unused leaf left in [1, 3)");
+      expect(j.all().map((r) => r.status)).toEqual(["burned", "burned"]); // nothing left reserved
+    } finally {
+      globalThis.fetch = realFetch;
+      node.storage = realStorage;
+      j.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

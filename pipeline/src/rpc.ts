@@ -185,6 +185,8 @@ export interface SimulationResult {
   frames: { gasUsed: Hex; succeeded: boolean }[] | null;
   executionStatus: "success" | "reverted" | null;
   executionError?: string | null;
+  /** what a reverting frame returned; the account reverts with one 32-byte ASCII reason (Account.yul fail) */
+  revertData?: Hex | null;
   erc7562Trace?: unknown;
   erc7562TraceError?: string | null;
 }
@@ -258,4 +260,8 @@ export const node = {
     rpc<SimulationResult>(DEVNET.node, "ethrex_simulateFrameTransaction", [encodeRawFrameTx(tx), "latest", { trace }]),
   /** The public mempool path: ethrex's own validation, one pending frame tx per sender. */
   sendRawPublic: (tx: FrameTransaction) => rpc<Hex>(DEVNET.node, "eth_sendRawTransaction", [encodeRawFrameTx(tx)]),
+  /** The node's view of a transaction, pending or mined; null when it holds no such transaction. */
+  transactionByHash: (hash: Hex) => rpc<unknown>(DEVNET.node, "eth_getTransactionByHash", [hash]),
+  /** A read-only call at the latest block, e.g. the account's views. */
+  call: (to: Address, data: Hex) => rpc<Hex>(DEVNET.node, "eth_call", [{ to, data }, "latest"]),
 };

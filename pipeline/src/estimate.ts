@@ -16,6 +16,7 @@ import { DEFAULTS, DEVNET, NONCE_MANAGER, SIG_SCHEME_COST } from "./config.ts";
 import { buildFrameTx, nonceManagerSlot, type Call } from "./builder.ts";
 import { placeholders, signFrameTx, type SignatureSlot } from "./signer.ts";
 import { rpc, toWire, node } from "./rpc.ts";
+import { LeavesExhausted } from "./submit.ts";
 import type { LeafJournal } from "./leaves.ts";
 import type { FrameTransaction } from "./codec/FrameTx.ts";
 
@@ -94,9 +95,21 @@ export async function estimateCalls(p: EstimateParams): Promise<CallEstimate[]> 
     // A leaf the journal has never seen and the chain has never consumed, burned whatever happens next.
     let leaf: number, nonceKey: bigint;
     for (;;) {
-      ({ leaf, nonceKey } = p.journal.reserveNext(p.band, "estimate only"));
-      if (BigInt(await node.storage(NONCE_MANAGER, nonceManagerSlot(p.sender, nonceKey))) === 0n) break;
-      p.journal.mark(leaf, "burned", { note: "key already consumed on chain" });
+      try {
+        ({ leaf, nonceKey } = p.journal.reserveNext(p.band, "estimate only"));
+      } catch (e) {
+        // a used-up band is the caller's 409, never a bug (review, Nov 6)
+        if (/no unused leaf/.test(e instanceof Error ? e.message : String(e))) throw new LeavesExhausted(`no leaf left for the estimate: ${(e as Error).message}`, { stage: "check", cause: e });
+        throw e;
+      }
+      let key: "unread" | "used" | "unused" = "unread";
+      try {
+        key = BigInt(await node.storage(NONCE_MANAGER, nonceManagerSlot(p.sender, nonceKey))) === 0n ? "unused" : "used";
+      } finally {
+        // A failed read burns the leaf too: left reserved, it would be a phantom lane that blocks rotation (review, Nov 6).
+        if (key !== "unused") p.journal.mark(leaf, "burned", { note: key === "used" ? "key already consumed on chain" : "estimate only: its key could not be read on chain; never signed" });
+      }
+      if (key === "unused") break;
     }
     try {
       const slots = p.signatures(leaf);

@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- Start page: picks a wallet from GET /api/wallets and links the three screens; creates a wallet when there is none.
+     Written with Claude Code (AI) for Vicky. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Winterlock</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="index.js"></script>
+</head>
+<body>
+<header class="top">
+  <span class="brand">Winterlock</span>
+  <nav class="screens" aria-label="Screens">
+    <a href="hot-cold.html" data-keep-wallet>Hot and cold</a>
+    <a href="agent.html" data-keep-wallet>Agent</a>
+    <a href="session.html" data-keep-wallet>Session</a>
+  </nav>
+</header>
+<p id="notice" class="notice-line" role="status" aria-live="polite"></p>
+
+<main>
+  <div class="panes">
+    <section class="pane" aria-labelledby="wallets-title">
+      <div class="pane-head">
+        <h2 id="wallets-title">Wallets</h2>
+        <p>post-quantum accounts this backend holds seeds for</p>
+      </div>
+      <ul class="wallets" id="wallets"><li class="muted">Loading…</li></ul>
+    </section>
+
+    <section class="pane" aria-labelledby="create-title">
+      <div class="pane-head">
+        <h2 id="create-title">Create a wallet</h2>
+        <p>a new seed and key tree, deployed by the backend's EOA</p>
+      </div>
+      <form id="create-form" class="group" novalidate>
+        <div class="row">
+          <label class="field"><span>Tree height</span><input type="number" class="mono" id="c-height" min="2" max="12" step="1" value="10"><span class="hint">2^h leaves per chain</span></label>
+          <label class="field"><span>Hot value cap, ETH</span><input type="text" class="mono" id="c-cap" inputmode="decimal" value="0.01" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <div class="row">
+          <label class="field"><span>Hot fee cap, ETH (optional)</span><input type="text" class="mono" id="c-fee" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.002"></label>
+          <label class="field"><span>Hot start (optional)</span><input type="number" class="mono" id="c-start" min="2" step="1" placeholder="2^h − 16"></label>
+        </div>
+        <label class="field"><span>Allowed target (optional)</span><input type="text" class="mono" id="c-target" autocomplete="off" spellcheck="false" placeholder="the devnet genesis account"></label>
+        <div class="row"><button class="btn primary" type="submit" id="create">Create wallet</button><span class="hint">Waits for the EOA's transaction to be mined.</span></div>
+      </form>
+    </section>
+  </div>
+</main>
+
+<footer id="status" class="status-line" aria-label="Status"></footer>
+</body>
+</html>
