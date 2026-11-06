@@ -1,6 +1,6 @@
 // Transaction records as the backend's store writes them (backend/src/store.ts), for the lane board's tests.
 // Written with Claude Code (AI) for Vicky.
-import type { TxRecord } from "../public/api.js";
+import type { TxRecord } from "../src/domain/api.js";
 
 export const H = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 export const T0 = Date.parse("2026-11-06T10:00:00.000Z");

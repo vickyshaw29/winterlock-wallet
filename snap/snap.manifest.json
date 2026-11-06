@@ -7,7 +7,7 @@
     "url": "https://github.com/vickyshaw29/winterlock-wallet.git"
   },
   "source": {
-    "shasum": "XK7H6JdZS1fFm0t+37AiDF9q3iRcwEnu056e0ZyXEj0=",
+    "shasum": "vFCW95T1T6cCd5rLIqEJlJn8LoRw3p4YNiIHjxrvB0g=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
@@ -18,14 +18,14 @@
   },
   "initialPermissions": {
     "endowment:rpc": {
-      "allowedOrigins": ["http://localhost:15190", "http://127.0.0.1:15190"]
+      "allowedOrigins": ["http://localhost:5173", "http://127.0.0.1:5173"]
     },
     "endowment:network-access": {},
     "snap_dialog": {},
     "snap_getEntropy": {},
     "snap_manageState": {},
     "endowment:keyring": {
-      "allowedOrigins": ["http://localhost:15190", "http://127.0.0.1:15190"]
+      "allowedOrigins": ["http://localhost:5173", "http://127.0.0.1:5173"]
     },
     "snap_manageAccounts": {}
   },

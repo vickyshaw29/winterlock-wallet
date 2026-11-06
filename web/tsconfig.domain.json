@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "checkJs": true,
+    "types": []
+  },
+  "include": [
+    "src/domain/*.js"
+  ]
+}

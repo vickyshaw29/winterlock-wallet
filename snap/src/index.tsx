@@ -71,7 +71,7 @@ const SCOPE = `eip155:${CHAIN}` as `${string}:${string}`;
 /** what MetaMask may ask of the account: the ERC-4337 methods only, so MetaMask never asks it for an EOA signature */
 const MM_METHODS = ["eth_prepareUserOperation", "eth_patchUserOperation", "eth_signUserOperation"] as const;
 /** the page's origins (snap.manifest.json): they may add the account to MetaMask and read it, never ask it to sign */
-const PAGE_ORIGINS = ["http://localhost:15190", "http://127.0.0.1:15190"];
+const PAGE_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
 /** the most calls one MetaMask user operation may carry: one transfer, or one contract call */
 const MM_MAX_CALLS = 1;
 

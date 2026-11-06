@@ -173,17 +173,18 @@ while alt lanes are pending ([why](docs/devnet-evidence.md#parallel-lanes-and-th
 `agent.html` and `session.html`, each have a Play scene button that runs their story, and a Mempool switch between alt
 and public. Seeds, journals and keys live in `~/.winterlock`, never in the repository.
 
-**4. From MetaMask Flask**, on the devnet. Install [MetaMask Flask](https://docs.metamask.io/snaps/get-started/install-flask/):
-local Snaps and MetaMask's ERC-4337 path run in Flask only.
+**4. Retained MetaMask integration services.** The React workspace on `http://127.0.0.1:5173/` is the sole
+product frontend. The old separate Snap demo page and its server have been removed. The Snap signer, keyring and
+bundler remain in `snap/` and `bundler/`; their exact permitted UI origins are `localhost:5173` and `127.0.0.1:5173`.
+The current React controls use backend signing. A Snap connection/signing flow is not exposed in this UI.
+
+For extension development only:
 
 ```sh
-(cd pipeline && bun install && bun run build)          # the core the Snap bundles
-(cd bundler && bun install && bun src/main.ts)          # http://127.0.0.1:15192/rpc, holds no key
-(cd snap && bun install && npm run serve)               # the Snap, local:http://localhost:15191
-(cd snap && bun site/serve.ts)                          # http://localhost:15190
+(cd pipeline && bun install && bun run build)
+(cd bundler && bun install && bun src/main.ts)          # bundler RPC on 15192
+(cd snap && bun install && npm run serve)               # extension bundle service on 15191
 ```
-
-On the page: connect Flask, create and fund the account, press **Add to MetaMask**, then **Send from MetaMask**.
 
 ## How it works
 
@@ -564,10 +565,13 @@ co-signature off; and declare every limit rather than let a judge find it.
 
 The code was written with Claude Code (Anthropic) under those decisions, and reviewed and run by Vicky. 24 of the 26
 non-merge commits carry a `Co-Authored-By: Claude` trailer, and the boilerplate commit `3b5fe45` says in its message
-that it was made with Claude, so `git log` shows where AI was used. Per file:
+that it was made with Claude, so `git log` shows where AI was used. Historical paths below include files since
+removed with the legacy frontends; the cleanup is attributed separately. Per file:
 
 <details>
 <summary>Every file written with an AI tool</summary>
+
+Historical paths below include frontends removed during the sole-UI cleanup; their original attribution is retained.
 
 - Scaffolding in commit `3b5fe45` ("boilerplate using claude"): the initial `backend/`, `contracts/`, `demo/`, `pipeline/` (a Rust stub, replaced by the TypeScript pipeline in V2), `signer/` and `web/` stubs, the root `.gitignore` and the submodule setup.
 - `pipeline/src/config.ts`, `rpc.ts`, `builder.ts`, `signer.ts`, `leaves.ts`, `submit.ts`, `index.ts`
@@ -598,11 +602,12 @@ that it was made with Claude, so `git log` shows where AI was used. Per file:
 - Sending from MetaMask itself through an ERC-4337 envelope (Nov 6, approved by Vicky; Claude Code researched MetaMask's source and ran a throwaway spike outside this repository first): `pipeline/src/userop.ts` (the envelope and `checkUserOpTx`), `signPrepared` in `pipeline/src/submit.ts`, the export in `pipeline/src/core.ts`, and `pipeline/test/userop.test.ts`; every file in `bundler/` (`src/bundler.ts`, `src/main.ts`, `test/bundler.test.ts`, `package.json`, `bun.lock`, `tsconfig.json`, `.gitignore`); in `snap/`, the Account Snap keyring in `src/index.tsx`, the `endowment:keyring` and `snap_manageAccounts` permissions, the MetaMask tests in `test/snap.test.js`, and step 4 of the page (`site/index.html`, `site/app.js`, `site/serve.ts`'s CSP)
 - The React and TypeScript workspace migration (Nov 6), written with Codex (OpenAI), directed and explicitly authorized by Vicky: `web/src/` (the entry, wallet state, React screens, shared components, production styles and local-font integration); `web/index.html`, `dev.ts`, `vite.config.ts`, `tsconfig.app.json`, `components.json`; the production SPA and guarded development proxy in `serve.ts`; gas-view types in `public/api.js`; `package.json`, `bun.lock`, `tsconfig.json`, `bunfig.toml`, `.gitignore` and `web/README.md`. Vicky approved Vite, React, TypeScript, Tailwind and shadcn/ui in place of the spec's earlier framework restriction. API, transaction and exact-integer helpers are reused from the existing frontend. Design-only reference artifacts are kept in the locally ignored `.claude/` directory. Browser QA uses a real backend and Rust signer over isolated fake RPC, with no live-wallet data. The copied shadcn/ui Button, Input and Dialog sources retain their MIT licence in `web/src/components/ui/LICENSE.md`; the new Manrope and IBM Plex Mono font files and SIL OFL licences in `web/src/styles/fonts/` are upstream Google Fonts assets.
 - React browser verification and migration documentation (Nov 6), written with Codex (OpenAI), directed by Vicky: `web/e2e/server.ts`, `e2e/app.spec.ts`, `playwright.config.ts`, `tsconfig.e2e.json`; browser/typecheck scripts in `web/package.json`; `web/README.md` and this attribution. The 22 Playwright tests run the production React bundle against a real backend and Rust signer over isolated fake RPC, including 66 axe scans across screen, task-tab, theme and dialog states. The 189 existing Bun tests and strict TypeScript checks also pass. Upstream font licence text is retained with normalized whitespace. No test result from the fake RPC is presented as devnet execution.
+- Sole-frontend cleanup (Nov 6), written with Codex (OpenAI), directed by Vicky: removed the retired `web/public/` and `snap/site/` UIs, the Flask navigation shortcut and old launch scripts; moved the shared API, flows, formatting, lanes, mock market, scenes and pure key-state code to `web/src/domain/`; updated React imports, `tsconfig.domain.json`, package scripts, proxy defaults and fixture-based server/integration tests; retired tests for removed DOM controllers while preserving domain, proxy and real-backend coverage. Updated the retained Snap origin lists and their simulator tests to the exact 5173 origins. Snap signing/keyring and bundler implementations are preserved. Changed `web/README.md` and this attribution; retired design artifacts remain only in locally ignored `.claude/`.
 - This README and `docs/` (Nov 6): written with Claude Code from the measured runs, the code and Vicky's notes, and edited by Vicky; restructured on Nov 6, 22:45 IST, at Vicky's request, after the README of her own Hanvil and of ETHOnline winners, with the long material moved word for word into `docs/design.md`, `docs/gas.md`, `docs/parallel-lanes.md` and `docs/devnet-evidence.md`. The Day-0 probe scripts, kept outside this repository, were also written with Claude Code
 
 </details>
 
-Not written by us: `pipeline/src/codec/codec.ts` and `pipeline/src/codec/FrameTx.ts` are copied from [mempool-workshop-sidecar](https://github.com/forshtat/mempool-workshop-sidecar) at commit `2e22ff0a`, MIT, Copyright (c) 2023 Etherspot; Claude Code added only the header comments and changed one import path. `fakechain/src/sidecarRules.ts` ports the sidecar's admission rules (classifyFrame, recognizeValidationPrefix, validateStructuralRules, validateSignature, describeStructuredFailure) from the same commit, MIT, Copyright (c) 2023 Etherspot, so the fake refuses with the sidecar's own words. The fonts in `web/public/fonts/`, Archivo (`archivo-latin.woff2`) and Besley (`besley-latin.woff2`), are from Google Fonts under the SIL Open Font License 1.1, Copyright 2020 The Archivo Project Authors and The Besley Project Authors; their licences are beside them (`OFL-Archivo.txt`, `OFL-Besley.txt`). `snap/site/fonts/` holds copies of the same two fonts and licence files.
+Not written by us: `pipeline/src/codec/codec.ts` and `pipeline/src/codec/FrameTx.ts` are copied from [mempool-workshop-sidecar](https://github.com/forshtat/mempool-workshop-sidecar) at commit `2e22ff0a`, MIT, Copyright (c) 2023 Etherspot; Claude Code added only the header comments and changed one import path. `fakechain/src/sidecarRules.ts` ports the sidecar's admission rules (classifyFrame, recognizeValidationPrefix, validateStructuralRules, validateSignature, describeStructuredFailure) from the same commit, MIT, Copyright (c) 2023 Etherspot, so the fake refuses with the sidecar's own words. The production fonts in `web/src/styles/fonts/`, Manrope (`manrope-latin.woff2`) and IBM Plex Mono (`ibm-plex-mono-latin.woff2`), are upstream Google Fonts assets under the SIL Open Font License 1.1. Their original copyrights and licence texts are retained beside them (`OFL-Manrope.txt`, `OFL-IBMPlexMono.txt`) and included in the production build. Archivo/Besley and the companion-page copies were removed with the retired frontends.
 
 ## Licence
 
@@ -610,5 +615,5 @@ MIT, see [LICENSE](LICENSE). Vendored code keeps its own licence: `vendor/mempoo
 `contracts/lib/forge-std` (MIT or Apache-2.0), and Quip Network's `contracts/lib/hashsigs-solidity` and Rust crate
 `hashsigs-rs` (both AGPL-3.0-or-later). Quip's code runs only in our tests, as an oracle for the WOTS+ format; no
 contract we deploy and no binary we build links it. `fakechain/src/sidecarRules.ts` and `pipeline/src/codec/` keep the
-sidecar's MIT notice (Copyright (c) 2023 Etherspot). The fonts in `web/public/fonts/` are under the SIL Open Font
+sidecar's MIT notice (Copyright (c) 2023 Etherspot). The fonts in `web/src/styles/fonts/` are under the SIL Open Font
 License 1.1, beside their licence files.

@@ -23,8 +23,8 @@ import {
   shortHex,
   type SendAnswer,
 } from "../lib/api";
-import { sessionScene } from "../../public/scenes.js";
-import { statusOf } from "../../public/lanes.js";
+import { sessionScene } from "../domain/scenes.js";
+import { statusOf } from "../domain/lanes.js";
 
 type Cell = { hash?: string; leaf?: number; state: string; words: string };
 export function SessionPage() {

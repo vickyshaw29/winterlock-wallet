@@ -19,7 +19,7 @@ async function installSnap() {
   return snapsJest.installSnap();
 }
 
-const ORIGIN = "http://localhost:15190";
+const ORIGIN = "http://localhost:5173";
 const OWNER = "0x00000000000000000000000000000000000e0a01";
 const TO = "0x000000000000000000000000000000000000beef";
 
@@ -121,11 +121,16 @@ describe("the Winterlock Snap", () => {
 
   it("lets only the page's origins call it (MetaMask's own check, on our manifest)", () => {
     const { isOriginAllowed } = require("@metamask/snaps-utils");
-    const origins = require("../snap.manifest.json").initialPermissions["endowment:rpc"];
-    expect(isOriginAllowed(origins, "website", "http://localhost:15190")).toBe(true);
-    expect(isOriginAllowed(origins, "website", "http://127.0.0.1:15190")).toBe(true);
-    expect(isOriginAllowed(origins, "website", "https://example.com")).toBe(false);
-    expect(isOriginAllowed(origins, "snap", "npm:some-other-snap")).toBe(false);
+    const permissions = require("../snap.manifest.json").initialPermissions;
+    for (const permission of ["endowment:rpc", "endowment:keyring"]) {
+      const origins = permissions[permission];
+      expect(isOriginAllowed(origins, "website", "http://localhost:5173")).toBe(true);
+      expect(isOriginAllowed(origins, "website", "http://127.0.0.1:5173")).toBe(true);
+      expect(isOriginAllowed(origins, "website", "http://localhost:15190")).toBe(false);
+      expect(isOriginAllowed(origins, "website", "http://127.0.0.1:15190")).toBe(false);
+      expect(isOriginAllowed(origins, "website", "https://example.com")).toBe(false);
+      expect(isOriginAllowed(origins, "snap", "npm:some-other-snap")).toBe(false);
+    }
   });
 });
 
@@ -169,6 +174,9 @@ describe("the Winterlock Snap as a MetaMask account (ERC-4337 envelope, Nov 6)",
     const asPage = { id: reqId(), scope: "eip155:1337", account: s.account.id, origin: ORIGIN, request: { method: "eth_prepareUserOperation", params: [{ to: TO, value: "0x3e8", data: "0x" }] } };
     await expect(keyringCall(s, ORIGIN, "keyring_submitRequest", asPage)).rejects.toThrow(/may not call keyring_submitRequest/);
     await expect(keyringCall(s, "https://example.com", "keyring_listAccounts")).rejects.toThrow(/may not call/);
+    for (const oldOrigin of ["http://localhost:15190", "http://127.0.0.1:15190"]) {
+      await expect(keyringCall(s, oldOrigin, "keyring_listAccounts")).rejects.toThrow(/may not call/);
+    }
     await expect(keyringCall(s, "metamask", "keyring_createAccount", { options: {} })).rejects.toThrow(/may not call/);
   });
 

@@ -40,8 +40,8 @@ import {
   uncutHotLeaves,
   weiToEthInput,
 } from "../lib/api";
-import { hotColdScene } from "../../public/scenes.js";
-import { setAside, setAsideText, statusOf } from "../../public/lanes.js";
+import { hotColdScene } from "../domain/scenes.js";
+import { setAside, setAsideText, statusOf } from "../domain/lanes.js";
 
 export function HotColdPage() {
   const state = useWallet();

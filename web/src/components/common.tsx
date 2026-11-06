@@ -13,7 +13,6 @@ import {
   Smartphone,
   TrendingUp,
   Grid2X2,
-  FlaskConical,
   Moon,
   Sun,
   Copy,
@@ -45,7 +44,7 @@ import {
   leafStates,
   nextTicket,
   stubsOf,
-} from "../../public/register.js";
+} from "../domain/register.js";
 
 export { Button, Input };
 export function Action({
@@ -219,10 +218,6 @@ export function Shell({
               </Link>
             );
           })}
-          <a className="flask-link" href="http://localhost:15190">
-            <FlaskConical aria-hidden="true" />
-            <span>Flask</span>
-          </a>
         </nav>
         <div className="rail-foot">
           <button

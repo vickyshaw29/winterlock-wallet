@@ -48,9 +48,9 @@ secret link, HttpOnly cookie and Host/Origin guard; follow the printed hotspot i
 Each use-case screen has the mempool switch, a Play scene action and a lane board with the six required columns.
 Lane inspection opens the admission checks, raw timeline, retry links, gas measurements, receipt and exact wire payload.
 Missing gas and receipts stay unknown; successful execution is determined by the receipt. A reverted frame consumes its
-key but does not appear as a successful dapp move. The Flask link opens the separate Snap app at `localhost:15190`.
+key but does not appear as a successful dapp move. The React workspace on port 5173 is the sole product frontend.
 
-Amount parsing and transaction bodies reuse the tested exact-integer helpers in `public/flows.js` and `format.js`.
+Amount parsing and transaction bodies reuse the tested exact-integer helpers in `src/domain/flows.js` and `format.js`.
 The API client preserves structured errors, including a 422's hash, leaf and simulation evidence.
 Signing is triggered only by explicit actions or a rule the user armed. POSTs are never retried by the frontend.
 The stuck-payment demonstration requests one backend retry on a fresh leaf after expiry; it never re-signs or fee-bumps.
@@ -79,9 +79,10 @@ a pinned lane column on narrow screens. Below 1000 px, task tabs expose Pay / Co
 Allowance / Activity, and Session / Dapp / Activity. They preserve inputs and live state, support arrow keys and
 Home/End, and participate in browser Back/Forward navigation. Session grants open the Dapp view on mobile.
 
-Design notes and reference prototypes are local-only under `.claude/`, excluded by `.git/info/exclude`.
-`bun run prototype` opens the locally archived reference when present. `public/` retains the pre-migration frontend and
-its helper/integration coverage. It is not copied into `dist/`; only imported production code and assets are bundled.
+The old HTML/JavaScript frontends and their separate servers have been removed. Shared API, transaction, formatting,
+lane, scene, mock-market and pure key-state helpers live in `src/domain/`. Design notes and retired references are
+local-only under `.claude/`, excluded by `.git/info/exclude`. Production always serves the compiled React app from
+`dist/`; there is no alternate prototype mode.
 
 ## Proxy and build
 
@@ -97,8 +98,8 @@ its own local HMR socket. The production server keeps the stricter policy. Scree
 ## Verification
 
 ```sh
-bun run typecheck       # server, legacy typed helpers/tests, and strict React TypeScript
-bun test                # existing helper, server, DOM-controller and real-backend integration coverage
+bun run typecheck       # server, shared typed helpers, browser tests and strict React TypeScript
+bun test                # shared helper, server and real-backend integration coverage
 bunx playwright install chromium
 bun run test:browser    # production build + isolated real-backend browser suite
 ```
@@ -111,16 +112,22 @@ wallet creation, cold policy/rotation, expiry with a fresh-leaf retry, agent par
 concurrent cells, device-journal loss, stalled-chain recovery, responsive task navigation and accessibility in both
 appearances. Browser artifacts are ignored in `test-results/`.
 
-Verified after migration: **189 Bun tests and 22 Playwright tests pass**, including 66 axe scans with no violations.
-Strict TypeScript checks and the Vite production build pass.
+The retained shared-logic, HTTP and real-backend suite has **91 passing Bun tests**.
+The production browser suite contains **22 passing Playwright tests**, including 66 axe scans across screen, task-tab, theme
+and dialog states. Strict TypeScript checks cover the React app, domain helpers, server and browser tests.
 
-The legacy tests remain useful for the reused transaction helpers; the Playwright suite verifies the React application.
+The helper and real-backend tests exercise the same domain modules imported by React. Obsolete DOM-controller tests
+were retired with their old implementations; the Playwright suite verifies the production React application.
 The fake RPC does not execute the EVM. Live devnet acceptance remains a separate integration check.
 
 ## Attribution
 
-The original API/helpers and legacy frontend were written with Claude Code for Vicky. The React migration, production
+The original shared API/helpers were written with Claude Code for Vicky; they were moved into `src/domain/` without
+changing transaction behavior. The retired frontends were also written with Claude Code. The React migration, production
 styles, Vite/proxy integration, browser checks and this documentation were written with Codex (OpenAI), directed by Vicky.
 The shadcn/ui Button, Input and Dialog sources were adapted from its Base UI registry; their MIT notice is retained in
 `src/components/ui/LICENSE.md`. Font licences remain beside their upstream assets. See the root README for file-level
 AI attribution. Design-only artifacts remain outside tracked source.
+
+The Snap signer and bundler remain integration services, with exact UI permissions limited to the 5173 origin. The
+current React controls use backend signing; retaining the extension code does not expose a Snap connection flow.
