@@ -1,0 +1,1151 @@
+<!doctype html>
+<!-- Winterlock UI direction 2, "the operations board": a static mock of the hot-and-cold screen. The mempool and the
+     chain are simulated in this page; nothing is sent anywhere. Written with Claude Code (AI) for Vicky. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Winterlock: hot and cold, operations board mock</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&amp;family=B612+Mono:wght@400;700&amp;display=swap">
+<style>
+/* Tokens. Day shift (light) by default; night shift (dark) from prefers-color-scheme, or forced with data-theme.
+   Lamp is used for one meaning only: a lane in flight. */
+:root {
+  --enamel: #E3E8E4;  /* the desk: control-panel enamel */
+  --panel: #F8FAF9;   /* the board, fields and tickets */
+  --ink: #000000;     /* text, track, settled lanes */
+  --slate: #34443C;   /* secondary text */
+  --rule: #6B7C73;    /* field borders, the unlit route */
+  --hair: #C5D0CA;    /* hairlines between lanes */
+  --lamp: #F5B400;    /* in flight, and nothing else */
+  --lamp-text: #000000;
+  --wash: #FBEFC8;    /* a lit lane */
+  --signal: #C3162D;  /* refused, danger */
+  --spent: #000000;   /* a burned leaf */
+  --on-ink: #F8FAF9;
+  --press: #26332D;
+  --sans: "B612", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "B612 Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.3, .7, .2, 1);
+  --gutter: 24px;
+  --adm: .14; --pen: .56; --dl: .75; --inc: .94;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --enamel: #0E2A2F; --panel: #133740; --ink: #EDF6F3; --slate: #A6C3BD; --rule: #5F8589; --hair: #24505A;
+    --lamp: #FFC431; --lamp-text: #FFC431; --wash: #1C4852; --signal: #FF7A7A; --spent: #6E9497;
+    --on-ink: #0E2A2F; --press: #C9DCD7; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --enamel: #0E2A2F; --panel: #133740; --ink: #EDF6F3; --slate: #A6C3BD; --rule: #5F8589; --hair: #24505A;
+  --lamp: #FFC431; --lamp-text: #FFC431; --wash: #1C4852; --signal: #FF7A7A; --spent: #6E9497;
+  --on-ink: #0E2A2F; --press: #C9DCD7; color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--enamel); color: var(--ink); font: 14px/1.5 var(--sans); }
+p, h1, h2, h3, h4 { margin: 0; }
+a { color: inherit; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.mono { font-family: var(--mono); }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+
+/* Layout: the page is a container, so the desk responds to its own width. */
+.page { container: page / inline-size; }
+.wrap { max-width: 1760px; margin: 0 auto; padding-left: var(--gutter); padding-right: var(--gutter); }
+@container page (max-width: 599.98px) { .wrap { --gutter: 16px; } }
+
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 28px; padding-top: 16px; padding-bottom: 12px; border-bottom: 3px solid var(--ink); }
+.brand { font-weight: 700; font-size: 17px; color: var(--ink); text-decoration: none; }
+.screens { display: flex; flex-wrap: wrap; gap: 4px 22px; }
+.screens a { color: var(--slate); text-decoration: none; }
+.screens a:hover { color: var(--ink); }
+.screens a[aria-current="page"] { color: var(--ink); font-weight: 700; text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 7px; }
+
+.banner { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 8px; background: var(--signal); color: var(--panel); font-weight: 700; }
+.banner[hidden] { display: none; }
+
+.wallet { padding-top: 18px; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px 36px; margin: 0; }
+.fact dt { font-size: 12px; color: var(--slate); }
+.fact dd { margin: 0; font-size: 16px; line-height: 1.35; }
+.notice { padding-top: 12px; min-height: 36px; display: flex; gap: 12px; align-items: baseline; font-size: 13.5px; }
+.notice .when { font-size: 12.5px; color: var(--slate); flex: none; }
+.notice .error { color: var(--signal); font-weight: 700; }
+.scene { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-top: 10px; }
+.scene .hint { flex: 1 1 360px; }
+
+.desk { display: grid; gap: 30px 28px; padding-top: 22px; padding-bottom: 36px; align-items: start;
+  grid-template-columns: minmax(0, 1fr); grid-template-areas: "phone" "board" "cold"; }
+@container page (min-width: 900px) { .desk { grid-template-columns: 300px minmax(0, 1fr); grid-template-areas: "phone board" "cold cold"; } }
+@container page (min-width: 1480px) { .desk { grid-template-columns: 292px minmax(0, 1fr) 324px; grid-template-areas: "phone board cold"; } }
+.phone { grid-area: phone; } .board { grid-area: board; } .cold { grid-area: cold; }
+
+/* Consoles: regions of the desk under a heavy rule, not cards. */
+.console { border-top: 3px solid var(--ink); padding-top: 12px; display: grid; gap: 18px; align-content: start; min-width: 0; }
+.console-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
+.console-head h2 { font-size: 19px; line-height: 1.3; font-weight: 700; }
+.console-head p { flex-basis: 100%; font-size: 12.5px; color: var(--slate); }
+.group { display: grid; gap: 10px; min-width: 0; }
+.group h3 { font-size: 14px; font-weight: 700; line-height: 1.4; }
+.groups { display: grid; gap: 20px; }
+.groups > .group + .group { border-top: 1px solid var(--hair); padding-top: 18px; }
+@container page (min-width: 900px) and (max-width: 1479.98px) {
+  .groups { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 24px 36px; }
+  .groups > .group, .groups > .group + .group { border-top: 1px solid var(--hair); padding-top: 14px; }
+}
+.cold.offline { border-top-style: dashed; }
+.cold.offline .groups { opacity: .42; }
+
+.hint { font-size: 12.5px; line-height: 1.5; color: var(--slate); max-width: 72ch; }
+.problem { font-size: 12.5px; font-weight: 700; color: var(--signal); }
+.problem[hidden] { display: none; }
+.warning { padding-left: 10px; border-left: 3px solid var(--signal); color: var(--signal); font-size: 13px; font-weight: 700; }
+.warning[hidden] { display: none; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span { font-size: 12.5px; color: var(--slate); }
+input[type="text"], input[type="number"] { width: 100%; min-width: 0; height: 38px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 7px; background: var(--panel); color: var(--ink); font: 14px/1 var(--sans); }
+input.mono { font: 13.5px/1 var(--mono); }
+input[readonly] { background: transparent; border-style: dashed; color: var(--slate); }
+input[aria-invalid="true"] { border: 2px solid var(--signal); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.row > .field { flex: 1 1 120px; }
+.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 13.5px; cursor: pointer; }
+.toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--ink); }
+
+.btn { appearance: none; height: 38px; padding: 0 16px; border: 1.5px solid var(--ink); border-radius: 7px; background: transparent; color: var(--ink); font: 700 13.5px/1 var(--sans); cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn.primary { background: var(--ink); color: var(--on-ink); }
+.btn.primary:hover:not(:disabled) { background: var(--press); border-color: var(--press); box-shadow: none; }
+.btn.danger { border-color: var(--signal); color: var(--signal); }
+.btn.danger:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--signal); }
+.btn.danger.armed { background: var(--signal); color: var(--panel); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.link { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.more summary { width: fit-content; font-size: 12.5px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.more[open] summary { margin-bottom: 6px; }
+
+/* ---------------------------------------------------------------- the phone: tickets */
+.count { display: flex; align-items: baseline; gap: 10px; }
+.count .big { font-size: 54px; line-height: 1; font-weight: 700; }
+.count .of { font-size: 20px; color: var(--slate); }
+.stack { position: relative; margin: 4px 0 14px; }
+.ticket { --nx: 28px; position: relative; z-index: 2; display: grid; grid-template-columns: var(--nx) minmax(0, 1fr); min-height: 98px; background: var(--panel); border: 1.5px solid var(--ink); border-radius: 8px;
+  -webkit-mask: radial-gradient(circle 8px at var(--nx) 0, #0000 97%, #000) top / 100% 51% no-repeat, radial-gradient(circle 8px at var(--nx) 100%, #0000 97%, #000) bottom / 100% 51% no-repeat;
+          mask: radial-gradient(circle 8px at var(--nx) 0, #0000 97%, #000) top / 100% 51% no-repeat, radial-gradient(circle 8px at var(--nx) 100%, #0000 97%, #000) bottom / 100% 51% no-repeat; }
+.ticket .stub { border-right: 2px dashed var(--rule); }
+.ticket.empty { border-style: dashed; border-color: var(--rule); }
+.t-body { padding: 12px 14px 12px 16px; display: grid; gap: 2px; align-content: center; min-width: 0; }
+.t-leaf { font-size: 13px; color: var(--slate); }
+.t-leaf b { font-size: 24px; line-height: 1.15; color: var(--ink); margin-left: 4px; }
+.t-lane { font-size: 13px; }
+.t-terms { font-size: 12.5px; line-height: 1.45; }
+.t-terms .mono, .c-action .mono { white-space: nowrap; }
+.t-empty { font-size: 13px; color: var(--slate); }
+.edge { position: absolute; height: 12px; border: 1.5px solid var(--ink); border-top: 0; border-radius: 0 0 8px 8px; background: var(--panel); }
+.edge.e1 { left: 8px; right: 8px; bottom: -6px; z-index: 1; }
+.edge.e2 { left: 16px; right: 16px; bottom: -12px; z-index: 0; }
+.stack[data-edges="0"] .edge, .stack[data-edges="1"] .e2 { display: none; }
+.ghost { position: fixed; z-index: 60; pointer-events: none; transform-origin: 0 0; background: var(--panel); border: 1.5px solid var(--ink); border-left: 2px dashed var(--rule); border-radius: 0 8px 8px 0; overflow: hidden; }
+
+/* ---------------------------------------------------------------- the cold device: key tree and hot band */
+.tree { display: flex; flex-wrap: wrap; gap: 8px 26px; margin: 0; }
+.tree dt { font-size: 12px; color: var(--slate); }
+.tree dd { margin: 0; }
+.band-title { font-size: 13px; }
+.band { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; }
+[data-s] { position: relative; display: block; border: 1.5px solid var(--ink); border-radius: 3px; background: var(--panel); overflow: hidden; }
+.band [data-s] { height: 26px; }
+[data-s]::after { content: ""; position: absolute; inset: 0; background: var(--spent); transform: scaleY(0); transform-origin: 50% 100%; }
+.band.ready [data-s]::after { transition: transform .55s var(--ease) .12s; }
+[data-s="burned"]::after { transform: scaleY(1); }
+[data-s="lit"] { background: var(--lamp); }
+[data-s="uncut"] { border-style: dashed; border-color: var(--rule); background: transparent; }
+.band-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--slate); margin-top: -4px; }
+.band-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--slate); }
+.band-key span { display: inline-flex; align-items: center; gap: 6px; }
+.band-key [data-s] { width: 12px; height: 12px; border-width: 1.5px; }
+
+/* ---------------------------------------------------------------- the lane board */
+.board { container: board / inline-size; background: var(--panel); border: 2px solid var(--ink); border-radius: 14px; min-width: 0; }
+.board-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; padding: 18px 20px 12px; }
+.b-title { flex: 1 1 250px; min-width: 0; }
+.b-title h2 { font-size: 21px; line-height: 1.2; font-weight: 700; }
+.b-title p { margin-top: 3px; font-size: 12.5px; color: var(--slate); }
+.clock { display: flex; align-items: center; gap: 10px; }
+.dial { width: 36px; height: 36px; flex: none; overflow: visible; }
+.dial .face { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.dial .tk { stroke: var(--ink); stroke-width: 2; stroke-linecap: round; }
+.dial .hand { stroke: var(--ink); stroke-width: 2.25; stroke-linecap: round; transform-origin: 16px 16px; animation: sweep 6s linear infinite; }
+.dial .hand.first { animation-delay: -2s; }
+.dial .hub { fill: var(--panel); stroke: var(--ink); stroke-width: 1.5; }
+@keyframes sweep { 0% { transform: rotate(0deg); } 92% { transform: rotate(360deg); } 100% { transform: rotate(360deg); } }
+.clock-text { display: grid; line-height: 1.25; white-space: nowrap; }
+.clock-text b { font-size: 19px; }
+.sub { font-size: 12px; color: var(--slate); }
+.inflight { display: flex; align-items: center; gap: 8px; }
+.inflight b { font-size: 19px; }
+.lamp-dot { width: 13px; height: 13px; flex: none; border-radius: 50%; border: 2px solid var(--ink); background: transparent; transition: background-color .3s; }
+.inflight[data-lit] .lamp-dot { background: var(--lamp); }
+.mempool { display: grid; gap: 4px; justify-items: start; }
+.mempool .label { font-size: 12px; color: var(--slate); }
+.seg { display: inline-flex; border: 1.5px solid var(--ink); border-radius: 7px; overflow: hidden; }
+.seg label { position: relative; }
+.seg input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; padding: 6px 15px; font-size: 13px; font-weight: 700; }
+.seg label + label span { border-left: 1.5px solid var(--ink); }
+.seg input:checked + span { background: var(--ink); color: var(--on-ink); }
+.seg input:focus-visible + span { outline: 2px solid currentColor; outline-offset: -5px; }
+.set-aside { padding: 0 20px 12px; font-size: 12.5px; color: var(--slate); }
+.set-aside b { color: var(--ink); }
+.limits { padding: 14px 20px 18px; border-top: 1px solid var(--hair); font-size: 12px; color: var(--slate); }
+.limits p { max-width: 110ch; }
+
+.lanes { position: relative; }
+.lane-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "lane leaf amount" "action action gas" "status status status";
+  column-gap: 14px; row-gap: 4px; align-items: baseline; padding: 14px 18px; border-top: 1px solid var(--hair); transition: background-color .6s ease, opacity .3s ease; }
+.c-lane { grid-area: lane; } .c-leaf { grid-area: leaf; white-space: nowrap; } .c-action { grid-area: action; min-width: 0; overflow-wrap: anywhere; }
+.c-amount { grid-area: amount; text-align: right; white-space: nowrap; } .c-gas { grid-area: gas; text-align: right; white-space: nowrap; }
+.c-status { grid-area: status; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding-top: 6px; min-width: 0; }
+.lane-row.head { grid-template-areas: "status status status"; padding-top: 4px; padding-bottom: 0; border-top: 0; font-size: 12px; color: var(--slate); }
+.lane-row.head > :not(.c-status) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.lane-row.head .c-status { padding-top: 0; }
+.stations { position: relative; display: block; flex: 1 0 100%; height: 26px; }
+.stations span { position: absolute; bottom: 8px; left: calc(var(--x) * 100%); transform: translateX(-7px); white-space: nowrap; line-height: 16px; }
+.stations .mid { transform: translateX(-50%); }
+.stations .end { transform: translateX(calc(-100% + 8px)); }
+.stations span::after { content: ""; position: absolute; top: 18px; left: 6px; width: 2px; height: 6px; background: var(--rule); }
+.stations .mid::after { left: calc(50% - 1px); }
+.stations .end::after { left: auto; right: 7px; }
+.lbl { color: var(--slate); }
+.lane-id { appearance: none; border: 0; background: none; padding: 2px 0; color: var(--ink); font: 700 15.5px/1.2 var(--mono); cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.lane-id::after { content: ""; border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .2s; }
+.lane-id[aria-expanded="true"]::after { transform: rotate(90deg); }
+.hot { display: inline-block; margin-left: 2px; padding: 0 6px 0 7px; font-size: 11.5px; line-height: 18px; font-weight: 700; border: 1px solid var(--ink); border-left-style: dashed; border-radius: 0 3px 3px 0; vertical-align: 1px; }
+.tag { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 11.5px; line-height: 18px; border: 1px solid var(--rule); border-radius: 3px; color: var(--slate); }
+.struck { text-decoration: line-through; text-decoration-thickness: 1.5px; color: var(--slate); }
+.lane-row[data-state="signed"], .lane-row[data-state="admitted"], .lane-row[data-state="pending"] { background: var(--wash); }
+.lane-row.arriving { opacity: 0; }
+.lane-row.spot { box-shadow: inset 4px 0 0 var(--ink); }
+.lane-row { cursor: pointer; }
+.lane-row.head { cursor: default; }
+
+/* The track: where the lane is. Stations at fixed x, the same on every row. */
+.track { position: relative; display: block; flex: 1 0 100%; height: 24px; container-type: inline-size; }
+.track i { position: absolute; display: block; }
+.rail { left: 0; right: 0; top: calc(50% - 1px); border-top: 2px dotted var(--rule); }
+.run { left: 0; top: calc(50% - 1px); width: 100%; height: 2px; background: var(--ink); transform-origin: 0 50%; transform: scaleX(var(--p)); transition: transform .55s var(--ease); }
+.tick { top: calc(50% - 6px); width: 2px; height: 12px; margin-left: -1px; background: var(--rule); }
+.tick.a { left: calc(var(--adm) * 100%); } .tick.p { left: calc(var(--pen) * 100%); } .tick.i { left: calc(var(--inc) * 100%); }
+.sig { display: none !important; left: calc(var(--adm) * 100%); top: calc(50% - 12px); width: 5px; height: 24px; margin-left: -2px; background: var(--signal); border-radius: 1px; }
+.dl { display: none !important; left: calc(var(--dl) * 100%); top: calc(50% - 11px); width: 0; height: 22px; margin-left: -2px; border-left: 4px dotted var(--ink); }
+.lane-row[data-state="expired"] .dl { border-left-style: solid; }
+.marker { left: 0; top: 50%; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; border: 2px solid var(--ink); border-radius: 50%; background: var(--lamp);
+  transform: translateX(calc(var(--p) * 100cqw)); transition: transform .55s var(--ease), border-radius .3s ease, background-color .3s ease; }
+.lane-row[data-state="included"] .marker { background: var(--ink); border-radius: 3px; }
+.lane-row[data-state="refused"] .marker, .lane-row[data-state="expired"] .marker { background: var(--panel); }
+.lane-row[data-state="refused"] .rail, .lane-row[data-state="expired"] .rail, .lane-row[data-state="included"] .rail { display: none; }
+.lane-row[data-state="refused"] .tick.p, .lane-row[data-state="refused"] .tick.i, .lane-row[data-state="expired"] .tick.i { display: none; }
+.lane-row[data-state="refused"] .sig { display: block !important; }
+.lane-row[data-stuck] .dl, .lane-row[data-state="expired"] .dl { display: block !important; }
+.track::before, .track::after { content: ""; position: absolute; left: calc(var(--inc) * 100%); top: -5px; bottom: -5px; pointer-events: none; }
+.track::after { border-left: 1px dashed var(--rule); }
+.track::before { width: 3px; margin-left: -1px; background: var(--lamp); opacity: 0; }
+.lanes.landing .track::before { animation: flash .9s ease-out; }
+@keyframes flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+.words { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.4; }
+.words .state { font-weight: 700; }
+.lane-row[data-state="pending"] .words .state, .lane-row[data-state="admitted"] .words .state { color: var(--lamp-text); }
+.lane-row[data-state="refused"] .words .state { color: var(--signal); }
+.why { display: block; font-size: 12.5px; color: var(--slate); }
+.explorer { margin-left: auto; font-size: 12.5px; }
+
+/* Medium board: the facts on one line, the track and its words under them. */
+@container board (min-width: 600px) {
+  .lane-row { grid-template-columns: 74px 96px minmax(0, 1fr) 104px 70px; grid-template-areas: "lane leaf action amount gas" "status status status status status"; row-gap: 6px; padding: 12px 20px; }
+  .lane-row.head { grid-template-areas: "lane leaf action amount gas" "status status status status status"; padding-top: 4px; padding-bottom: 0; }
+  .lane-row.head > :not(.c-status) { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .lane-row.head .c-amount, .lane-row.head .c-gas { text-align: right; }
+  .lbl { display: none; }
+  .c-status { flex-wrap: nowrap; padding-top: 2px; }
+  .track, .stations { flex: 0 0 min(52%, 380px); }
+}
+/* Wide board: one line per lane, and one block line through every row at the included station. */
+@container board (min-width: 1000px) {
+  .lane-row { grid-template-columns: 70px 92px minmax(150px, 1fr) 100px 64px 420px; grid-template-areas: "lane leaf action amount gas status"; align-items: center; }
+  .lane-row.head { grid-template-areas: "lane leaf action amount gas status"; padding-top: 6px; padding-bottom: 8px; }
+  .c-status { padding-top: 0; }
+  .track, .stations { flex: 0 0 220px; }
+  .track::before, .track::after { display: none; }
+  .lanes::before, .lanes::after { content: ""; position: absolute; top: 0; bottom: 0; pointer-events: none; right: calc(440px - var(--inc) * 220px); }
+  .lanes::after { border-left: 1px dashed var(--rule); }
+  .lanes::before { width: 3px; margin-right: -2px; background: var(--lamp); opacity: 0; }
+  .lanes.landing::before { animation: flash .9s ease-out; }
+}
+
+.detail-row { position: relative; z-index: 1; background: var(--enamel); border-top: 1px solid var(--hair); cursor: default; }
+.detail { display: grid; gap: 18px 28px; padding: 16px 20px 20px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); font-size: 13px; }
+.detail h4 { margin-bottom: 6px; font-size: 13px; font-weight: 700; }
+.detail ul, .detail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.detail dl { grid-column: 1 / -1; margin: 0; display: grid; gap: 10px 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
+.detail > p { grid-column: 1 / -1; }
+.detail dt { font-size: 12px; color: var(--slate); }
+.detail dd { margin: 0; overflow-wrap: anywhere; }
+.v { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.verdict { display: inline-block; min-width: 34px; font-weight: 700; }
+.verdict.fail { color: var(--signal); }
+.when { color: var(--slate); margin-right: 6px; }
+
+/* Rolling digits: only the digits that change. */
+.rc { display: inline-block; position: relative; overflow: hidden; vertical-align: bottom; }
+.rc > span { display: block; }
+.rc.rolling .ro { animation: rout .34s var(--ease) forwards; }
+.rc.rolling .rn { position: absolute; left: 0; top: 0; transform: translateY(100%); animation: rin .34s var(--ease) forwards; }
+@keyframes rin { to { transform: none; } }
+@keyframes rout { to { transform: translateY(-100%); } }
+
+.status { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: center; padding-top: 12px; padding-bottom: 26px; border-top: 3px solid var(--ink); font-size: 12.5px; color: var(--slate); }
+.status .proto { color: var(--ink); font-weight: 700; }
+.theme { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.theme legend { float: left; margin-right: 10px; padding: 0; }
+.theme label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+.theme input { margin: 0; accent-color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+<header class="top wrap">
+  <a class="brand" href="#">Winterlock</a>
+  <nav class="screens" aria-label="Screens">
+    <a href="#" aria-current="page">Hot and cold</a>
+    <a href="#">Agent</a>
+    <a href="#">Session</a>
+  </nav>
+</header>
+
+<div class="wrap"><div id="banner" class="banner" role="alert" hidden><span>The chain looks stalled: latest block 408,262, 2 min ago. The backend refuses to sign until it moves, so sending is off.</span><button class="btn" type="button">Try again</button></div></div>
+
+<section class="wrap wallet" aria-label="Wallet">
+  <dl class="facts">
+    <div class="fact"><dt>Wallet</dt><dd class="mono" title="0x66a5031c7E94b2F0d8A3e61C5B9f0274aE1dD38A">0x66a503…D38A</dd></div>
+    <div class="fact"><dt>Balance</dt><dd id="w-balance">9.947698 ETH</dd></div>
+    <div class="fact"><dt>Epoch</dt><dd>0</dd></div>
+    <div class="fact"><dt>Leaves used</dt><dd><span id="w-used">12</span> of 1,024</dd></div>
+    <div class="fact"><dt>Tickets on the phone</dt><dd id="w-tickets">3 of 10</dd></div>
+  </dl>
+</section>
+
+<p class="wrap notice" id="notice" role="status" aria-live="polite"><span class="when">13:24:36</span> <span>Cold device sent 0.25 ETH on lane 0x2 (leaf 2): admitted.</span></p>
+
+<div class="wrap scene">
+  <button class="btn" type="button" id="play">Play scene</button>
+  <p class="hint">The cold device cuts tickets if the phone has fewer than 7, then goes offline; the phone pays three times on the alt mempool as parallel lanes, the third one the stuck payment (a 4-second first deadline, so it misses its block); then the mempool switches to public (one pending per sender, not yet confirmed on the devnet) and the phone pays three more times, each shown admitted or refused.</p>
+</div>
+
+<main class="wrap desk">
+  <section class="console phone" id="phone-pane" aria-labelledby="phone-title">
+    <div class="console-head">
+      <h2 id="phone-title">Phone</h2>
+      <p>The backend's ticket device: signs from its ticket files, never from the seed.</p>
+    </div>
+    <fieldset id="phone-fields" class="groups">
+      <legend class="vh">Phone</legend>
+      <div class="group">
+        <p class="count"><span class="big" id="t-left">3</span><span class="of">of <span id="t-cut">10</span></span></p>
+        <p class="hint" id="ticket-note">tickets left of those cut; 7 used or burned</p>
+        <p class="warning" id="device-issue" role="status" hidden></p>
+        <div class="stack" id="stack" data-edges="2">
+          <div class="ticket" id="ticket"><span class="stub" aria-hidden="true"></span><div class="t-body"><p class="t-leaf">next ticket, leaf <b>1015</b></p><p class="t-lane mono">lane 0x3f7</p><p class="t-terms">up to 0.01 ETH, only to <span class="mono">0x2c58…C537</span>; fee up to 0.002 ETH</p></div></div>
+          <i class="edge e1" aria-hidden="true"></i><i class="edge e2" aria-hidden="true"></i>
+        </div>
+      </div>
+      <form id="pay-form" class="group" novalidate>
+        <label class="field"><span>To, the allowed target</span><input type="text" class="mono" id="pay-to" readonly value="0x2c58F1a9083De4b7C6E25f9A0b3d71E84F02C537"></label>
+        <label class="field"><span>Amount, ETH</span><input type="text" id="pay-amount" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.001" aria-describedby="pay-cap pay-problem"></label>
+        <p class="hint" id="pay-cap">Hot value cap 0.01 ETH per payment, fee cap 0.002 ETH.</p>
+        <p class="problem" id="pay-problem" hidden></p>
+        <div class="row">
+          <button class="btn primary" id="pay" type="submit">Pay</button>
+          <button class="btn" id="stuck" type="button">Simulate stuck payment</button>
+        </div>
+        <details class="more">
+          <summary>Why the stuck payment expires</summary>
+          <p class="hint">Its first try gets only 4 seconds, less than one 6-second block of the devnet, so it misses its block and expires: its ticket is burned. Then one retry goes out on a fresh lane with the normal deadline (90 s). Both offer the market's fee: on this devnet a fee below the 7-wei base fee is refused at admission, and any fee above it is included, so a low fee would not make it stuck. The expired leaf is never re-signed and never fee-bumped.</p>
+        </details>
+      </form>
+      <p class="hint" id="phone-set-aside">Set aside for pending: <b>0.250198 ETH</b> on 1 lane (its value plus the maximum cost the backend reports: what the sidecar sets aside).</p>
+    </fieldset>
+  </section>
+
+  <section class="board" aria-labelledby="board-title">
+    <div class="board-head">
+      <div class="b-title">
+        <h2 id="board-title">Lane board</h2>
+        <p>Each row is one lane: a nonce key, epoch and leaf, that the chain uses once.</p>
+      </div>
+      <div class="clock">
+        <svg class="dial" viewBox="0 0 32 32" aria-hidden="true">
+          <circle class="face" cx="16" cy="16" r="14.5"/>
+          <line class="tk" x1="16" y1="3.5" x2="16" y2="6"/><line class="tk" x1="26.83" y1="9.75" x2="24.66" y2="11"/>
+          <line class="tk" x1="26.83" y1="22.25" x2="24.66" y2="21"/><line class="tk" x1="16" y1="28.5" x2="16" y2="26"/>
+          <line class="tk" x1="5.17" y1="22.25" x2="7.34" y2="21"/><line class="tk" x1="5.17" y1="9.75" x2="7.34" y2="11"/>
+          <line class="hand first" id="hand" x1="16" y1="16" x2="16" y2="5.5"/>
+          <circle class="hub" cx="16" cy="16" r="2.4"/>
+        </svg>
+        <p class="clock-text"><span>block <b id="block-no">408,262</b></span><span class="sub">chain 1337, a block every 6 s</span></p>
+      </div>
+      <p class="inflight" id="inflight" data-lit><i class="lamp-dot" aria-hidden="true"></i><b id="inflight-n">1</b> <span id="inflight-word">lane in flight</span></p>
+      <div class="mempool">
+        <span class="label" id="mempool-label">Mempool</span>
+        <div class="seg" role="radiogroup" aria-labelledby="mempool-label">
+          <label><input type="radio" name="mempool" value="alt" checked><span>alt</span></label>
+          <label><input type="radio" name="mempool" value="public"><span>public</span></label>
+        </div>
+        <span class="sub" id="mempool-rule">Parallel lanes: one pending per lane (nonce key), relayed at most 4 per 10 s pass.</span>
+      </div>
+    </div>
+    <p class="set-aside" id="set-aside">Set aside for pending: <b>0.250198 ETH</b> on 1 lane (its value plus the maximum cost the backend reports: what the sidecar sets aside).</p>
+    <div class="lanes" id="lanes" role="table" aria-labelledby="board-title" data-mempool="alt">
+      <div role="rowgroup">
+        <div role="row" class="lane-row head">
+          <span role="columnheader" class="c-lane">Lane</span>
+          <span role="columnheader" class="c-leaf">Leaf</span>
+          <span role="columnheader" class="c-action">Action</span>
+          <span role="columnheader" class="c-amount">Amount</span>
+          <span role="columnheader" class="c-gas">Gas</span>
+          <span role="columnheader" class="c-status"><span class="vh">Status</span><span class="stations" aria-hidden="true"><span style="--x: var(--adm)">admitted</span><span class="mid" style="--x: var(--pen)">pending</span><span class="end" style="--x: var(--inc)">included</span></span></span>
+        </div>
+      </div>
+      <div role="rowgroup" id="rows"><div role="row" class="lane-row" id="row-0x2" data-key="0x2" data-state="pending" data-mode="cold" style="--p: 0.56"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x2" title="Show the admission report">0x2</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>2</span><span role="cell" class="c-action">pay <span class="mono">0x5544…16f9</span></span><span role="cell" class="c-amount" title="0.25 ETH, exact">0.25 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">86,940</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">pending</b> for <span class="since">9 s</span></span><a class="explorer" href="#explorer" data-hash="0xedc2904dfc6baf39cb68fa0031cef19dc82f612ba5445467bee88614f84ac71f">explorer</a></span></div><div role="row" class="lane-row" id="row-0x3f6" data-key="0x3f6" data-state="refused" data-mode="hot" style="--p: 0.095"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x3f6" title="Show the admission report">0x3f6</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1014 <span class="hot">hot</span></span><span role="cell" class="c-action">hot ticket to <span class="mono">0x53c9…6356</span></span><span role="cell" class="c-amount struck" title="0.001 ETH, exact">0.001 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">—</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">refused</b>: target not allowed <span class="why">leaf burned</span></span><a class="explorer" href="#explorer" data-hash="0x7b66c73bac6032b533fb70f62133d2336c99697b5e1f4bcaebe4890de811ba4f">explorer</a></span></div><div role="row" class="lane-row" id="row-0x3f5" data-key="0x3f5" data-state="refused" data-mode="hot" style="--p: 0.095"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x3f5" title="Show the admission report">0x3f5</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1013 <span class="hot">hot</span></span><span role="cell" class="c-action">hot ticket to <span class="mono">0x2c58…C537</span></span><span role="cell" class="c-amount struck" title="0.1 ETH, exact">0.1 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">—</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">refused</b>: exceeds value cap <span class="why">leaf burned</span></span><a class="explorer" href="#explorer" data-hash="0x6c9c475cf9eb87a895b093a1adff9a66c4089c9554ca2374757c5a277b2f1567">explorer</a></span></div><div role="row" class="lane-row" id="row-0x3f4" data-key="0x3f4" data-state="included" data-mode="hot" style="--p: 0.94"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x3f4" title="Show the admission report">0x3f4</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1012 <span class="hot">hot</span></span><span role="cell" class="c-action">hot ticket to <span class="mono">0x2c58…C537</span></span><span role="cell" class="c-amount" title="0.01 ETH, exact">0.01 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">88,019</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">included</b> in block 408,230</span><a class="explorer" href="#explorer" data-hash="0x24e10e199e6ddf50d2d7c90c88e47e2259bc6fff96191c50268abb4107966c00">explorer</a></span></div><div role="row" class="lane-row" id="row-0x3f3" data-key="0x3f3" data-state="included" data-mode="hot" style="--p: 0.94"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x3f3" title="Show the admission report">0x3f3</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1011 <span class="hot">hot</span></span><span role="cell" class="c-action">hot ticket to <span class="mono">0x2c58…C537</span></span><span role="cell" class="c-amount" title="0.01 ETH, exact">0.01 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">88,019</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">included</b> in block 408,230</span><a class="explorer" href="#explorer" data-hash="0xc1da1d06c6e4b94f2c97cc41e98d23df3e996c75c62573a8946f39b0afbec661">explorer</a></span></div><div role="row" class="lane-row" id="row-0x3f2" data-key="0x3f2" data-state="included" data-mode="hot" style="--p: 0.94"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x3f2" title="Show the admission report">0x3f2</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1010 <span class="hot">hot</span></span><span role="cell" class="c-action">hot ticket to <span class="mono">0x2c58…C537</span></span><span role="cell" class="c-amount" title="0.01 ETH, exact">0.01 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">87,028</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">included</b> in block 408,229</span><a class="explorer" href="#explorer" data-hash="0x28f400243324540246fb57523dc8145c1b4dcffdeb7be4d84027cbf02d183079">explorer</a></span></div><div role="row" class="lane-row" id="row-0x3f1" data-key="0x3f1" data-state="included" data-mode="hot" style="--p: 0.94"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x3f1" title="Show the admission report">0x3f1</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1009 <span class="hot">hot</span></span><span role="cell" class="c-action">hot ticket to <span class="mono">0x2c58…C537</span></span><span role="cell" class="c-amount" title="0.01 ETH, exact">0.01 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">88,019</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">included</b> in block 408,229</span><a class="explorer" href="#explorer" data-hash="0x452b192812afe67bc223c90c17d2660be48ff97409aed817501b3b2ae08c8f67">explorer</a></span></div><div role="row" class="lane-row" id="row-0x3f0" data-key="0x3f0" data-state="included" data-mode="hot" style="--p: 0.94"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x3f0" title="Show the admission report">0x3f0</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1008 <span class="hot">hot</span></span><span role="cell" class="c-action">hot ticket to <span class="mono">0x2c58…C537</span></span><span role="cell" class="c-amount" title="0.001 ETH, exact">0.001 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">87,028</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">included</b> in block 408,171</span><a class="explorer" href="#explorer" data-hash="0xb68b52edf73a9e4b42463fffd1df418a1612981df551483dc8e6203c237eb318">explorer</a></span></div><div role="row" class="lane-row" id="row-0x1" data-key="0x1" data-state="included" data-mode="cold" style="--p: 0.94"><span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-0x1" title="Show the admission report">0x1</button></span><span role="cell" class="c-leaf"><span class="lbl">leaf </span>1</span><span role="cell" class="c-action">pay <span class="mono">0x5544…16f9</span></span><span role="cell" class="c-amount" title="0.01 ETH, exact">0.01 ETH</span><span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">86,353</span></span><span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span><span class="words"><b class="state">included</b> in block 408,103</span><a class="explorer" href="#explorer" data-hash="0x6a10b6fdabe57c9587b923b8cd4489d7acaea758bd18a4761ab174eca310216e">explorer</a></span></div></div>
+    </div>
+    <div class="limits"><p>Parallel lanes on the devnet's sidecar: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself, relayed at most 4 per 10 s pass by default, so 8 lanes land over two or more blocks. (The ERC-8421 draft's numbers, 4 per key and 64 per unstaked sender, are the draft's, not the devnet's.) The public mempool holds one pending per sender: not yet confirmed on the devnet.</p></div>
+  </section>
+
+  <section class="console cold" id="cold-pane" aria-labelledby="cold-title">
+    <div class="console-head">
+      <h2 id="cold-title">Cold device</h2>
+      <label class="toggle"><input type="checkbox" id="offline"> Offline</label>
+    </div>
+    <fieldset id="cold-fields" class="groups">
+      <legend class="vh">Cold device</legend>
+      <div class="group">
+        <h3>Key tree</h3>
+        <dl class="tree">
+          <div><dt>Height</dt><dd>10</dd></div>
+          <div><dt>Epoch</dt><dd>0</dd></div>
+          <div><dt>Leaves used</dt><dd><span id="tree-used">12</span> of 1,024</dd></div>
+          <div><dt>Root</dt><dd class="mono" title="0x9b31e0d4c87a2f65e1b09d3c4a7f8e2615d0b3a9c6e4f1d28a07b5c39e7f4c2a">0x9b31e0…7f4c2a</dd></div>
+        </dl>
+        <p class="band-title">Hot band, leaves 1008 to 1023</p>
+        <div class="band" id="band" role="img" aria-label="Hot band: 7 burned, 3 on the phone, 6 not cut"><i data-leaf="1008" data-s="burned" title="leaf 1008: burned"></i><i data-leaf="1009" data-s="burned" title="leaf 1009: burned"></i><i data-leaf="1010" data-s="burned" title="leaf 1010: burned"></i><i data-leaf="1011" data-s="burned" title="leaf 1011: burned"></i><i data-leaf="1012" data-s="burned" title="leaf 1012: burned"></i><i data-leaf="1013" data-s="burned" title="leaf 1013: burned"></i><i data-leaf="1014" data-s="burned" title="leaf 1014: burned"></i><i data-leaf="1015" data-s="phone" title="leaf 1015: on the phone"></i><i data-leaf="1016" data-s="phone" title="leaf 1016: on the phone"></i><i data-leaf="1017" data-s="phone" title="leaf 1017: on the phone"></i><i data-leaf="1018" data-s="uncut" title="leaf 1018: not cut"></i><i data-leaf="1019" data-s="uncut" title="leaf 1019: not cut"></i><i data-leaf="1020" data-s="uncut" title="leaf 1020: not cut"></i><i data-leaf="1021" data-s="uncut" title="leaf 1021: not cut"></i><i data-leaf="1022" data-s="uncut" title="leaf 1022: not cut"></i><i data-leaf="1023" data-s="uncut" title="leaf 1023: not cut"></i></div>
+        <p class="band-ends" aria-hidden="true"><span>1008</span><span>1023</span></p>
+        <p class="band-key" id="band-key"><span><i data-s="burned" aria-hidden="true"></i>7 burned</span> <span><i data-s="phone" aria-hidden="true"></i>3 on the phone</span> <span><i data-s="uncut" aria-hidden="true"></i>6 not cut</span></p>
+        <p class="hint">Leaves used counts every cut ticket: <span id="used-split">10 hot and 2 cold</span>.</p>
+      </div>
+      <form id="transfer-form" class="group" novalidate>
+        <h3>Transfer</h3>
+        <p class="hint">Large transfers go through the cold device: a keyed lane on the next cold leaf, to any address, no cap.</p>
+        <label class="field"><span>To</span><input type="text" class="mono" id="transfer-to" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+        <div class="row">
+          <label class="field"><span>Amount, ETH</span><input type="text" id="transfer-amount" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+          <button class="btn primary" id="transfer" type="submit">Send from cold</button>
+        </div>
+        <p class="problem" id="transfer-problem" hidden></p>
+      </form>
+      <form id="policy-form" class="group" novalidate>
+        <h3>Hot policy</h3>
+        <div class="row">
+          <label class="field"><span>Value cap, ETH</span><input type="text" id="policy-value" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.01"></label>
+          <label class="field"><span>Fee cap, ETH</span><input type="text" id="policy-fee" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.002"></label>
+        </div>
+        <label class="field"><span>Allowed target</span><input type="text" class="mono" id="policy-target" autocomplete="off" spellcheck="false" value="0x2c58F1a9083De4b7C6E25f9A0b3d71E84F02C537"></label>
+        <label class="field"><span>Hot start (first hot leaf)</span><input type="number" id="policy-start" min="1" step="1" value="1008"><span class="hint">Kept or lowered, never raised within an epoch.</span></label>
+        <div class="row"><button class="btn primary" id="policy-set" type="submit">Set policy</button><span class="hint">A value cap of 0 is the kill switch for every ticket.</span></div>
+        <p class="problem" id="policy-problem" hidden></p>
+      </form>
+      <form id="cut-form" class="group" novalidate>
+        <h3>Tickets for the phone</h3>
+        <p class="hint" id="cut-left">6 hot leaves not cut yet; 10 cut this epoch. Each ticket is one leaf's secrets and path, no seed.</p>
+        <div class="row">
+          <label class="field"><span>Count</span><input type="number" id="cut-count" min="1" max="6" step="1" value="6"></label>
+          <button class="btn" id="cut" type="submit">Cut tickets</button>
+        </div>
+      </form>
+      <form id="rotate-form" class="group" novalidate>
+        <h3>Rotation</h3>
+        <p class="warning">Rotation invalidates every pending lane.</p>
+        <div class="row">
+          <label class="field"><span>New tree height</span><input type="number" id="rotate-height" min="2" max="12" step="1" value="10"></label>
+          <button class="btn danger" id="rotate" type="submit">Rotate root</button>
+        </div>
+        <p class="hint">The backend refuses to rotate while a lane is in flight; the wallet moves to the new epoch once the rotation is included.</p>
+      </form>
+    </fieldset>
+  </section>
+</main>
+
+<footer class="wrap status" aria-label="Status">
+  <span>backend (via this server)</span>
+  <span>chain 1337</span>
+  <span id="foot-block">latest block 408,262, 2 s ago</span>
+  <span class="proto">Prototype. Mempool and chain simulated in page.</span>
+  <fieldset class="theme"><legend>Preview theme, mock only</legend>
+    <label><input type="radio" name="theme" value="" checked> system</label>
+    <label><input type="radio" name="theme" value="light"> light</label>
+    <label><input type="radio" name="theme" value="dark"> dark</label>
+  </fieldset>
+</footer>
+</div>
+
+<script id="model">
+/* The model: data, formatting and HTML templates, with no DOM. The page renders from it, and so does the snapshot
+   that fills this file's static board, so the page reads the same before its script runs. */
+const MODEL = (() => {
+  'use strict';
+  const GW = 1e9;
+  const FEE = 193882;      // gwei per included lane: gas used 193,882 at about 1 gwei
+  const MAXCOST = 198213;  // gwei: what the sidecar sets aside on top of a pending lane's value
+  const POS = { signed: 0.03, admitted: 0.14, pending: 0.56, included: 0.94, refused: 0.095, expired: 0.72 };
+  const ADDR = {
+    wallet: '0x66a5031c7E94b2F0d8A3e61C5B9f0274aE1dD38A',
+    target: '0x2c58F1a9083De4b7C6E25f9A0b3d71E84F02C537',
+    other: '0x5544b7e02F9c3A61d8E4f0B2a7C9e13D5b0a16f9',
+    stranger: '0x53c9A0e7d14B8f26C3e9a5D01b7F4e82c6A96356',
+  };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const num = (n) => Number(n).toLocaleString('en-US');
+  const short = (a, h = 4, t = 4) => (a.length <= 2 + h + t + 1 ? a : `${a.slice(0, 2 + h)}…${a.slice(-t)}`);
+  function eth(g) {
+    if (!g) return '0 ETH';
+    const v = g / GW;
+    const places = g >= GW ? 6 : Math.min(9, Math.ceil(-Math.log10(v)) - 1 + 6);
+    return `${v.toFixed(places).replace(/\.?0+$/, '')} ETH`;
+  }
+  const laneKey = (epoch, leaf) => `0x${((BigInt(epoch) << 32n) | BigInt(leaf)).toString(16)}`;
+  function hashFor(seed) {
+    let x = Math.imul(seed + 40503, 2654435761) >>> 0 || 1, out = '0x';
+    for (let i = 0; i < 64; i++) { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; out += (x & 15).toString(16); }
+    return out;
+  }
+  const inFlight = (l) => l.state === 'signed' || l.state === 'admitted' || l.state === 'pending';
+  const GAS = { hot: [87028, 88019, 86811, 87642, 88305], cold: [86353, 86940, 85977] };
+  const gasFor = (l) => GAS[l.mode][l.leaf % GAS[l.mode].length];
+
+  function lane(o, epoch = 0) {
+    const l = Object.assign({ kind: 'pay', gas: null, block: null, reason: null, violation: null, relayed: false, stuck: false,
+      deadline: null, retryOf: null, retriedAs: null, mempool: 'alt', steps: [], admittedAt: null, policy: null }, o);
+    l.key = laneKey(epoch, l.leaf);
+    l.hash = hashFor(l.leaf * 7 + 3);
+    return l;
+  }
+
+  /** The screen as the brief gives it, at time T (performance.now()). */
+  function initial(T) {
+    const ago = (s) => T - s * 1000;
+    const S = { block: 408262, headAt: ago(2), nextBlockAt: T + 4000, nextPassAt: T + 15000, mempool: 'alt', offline: false,
+      balance: 9947698000, epoch: 0, hotStart: 1008, coldUsed: 2, coldNext: 3, cut: 10,
+      valueCap: 10000000, feeCap: 2000000, target: ADDR.target };
+    const band = new Map();
+    for (let leaf = 1008; leaf <= 1023; leaf++) band.set(leaf, leaf <= 1014 ? 'burned' : leaf <= 1017 ? 'phone' : 'uncut');
+    const landed = (leaf, mode, to, value, gas, block, signed) => {
+      const at = ago((S.block - block) * 6 + 2);
+      return lane({ leaf, mode, to, value, gas, block, state: 'included', at: ago(signed), admittedAt: ago(signed - 0.4),
+        steps: [['Submitted', ago(signed - 0.4)], ['sidecar: Pending', ago(signed - 0.9)], [`chain: key used by block ${num(block)}`, at], [`OnChain in block ${num(block)}`, at + 700]] });
+    };
+    const lanes = [
+      lane({ leaf: 2, mode: 'cold', to: ADDR.other, value: 250000000, gas: 86940, state: 'pending', at: ago(9.8), admittedAt: ago(9.4),
+        steps: [['Submitted', ago(9.4)], ['sidecar: Pending', ago(8.9)]] }),
+      lane({ leaf: 1014, mode: 'hot', to: ADDR.stranger, value: 1000000, state: 'refused', reason: 'target not allowed',
+        violation: 'account: hot: frame target', at: ago(141), steps: [['Refused: validation frame 1 reverted (hot: frame target)', ago(140.6)]] }),
+      lane({ leaf: 1013, mode: 'hot', to: ADDR.target, value: 100000000, state: 'refused', reason: 'exceeds value cap',
+        violation: 'account: hot: value cap', at: ago(150), steps: [['Refused: validation frame 1 reverted (hot: value cap)', ago(149.6)]] }),
+      landed(1012, 'hot', ADDR.target, 10000000, 88019, 408230, 206),
+      landed(1011, 'hot', ADDR.target, 10000000, 88019, 408230, 206.2),
+      landed(1010, 'hot', ADDR.target, 10000000, 87028, 408229, 206.4),
+      landed(1009, 'hot', ADDR.target, 10000000, 88019, 408229, 206.6),
+      landed(1008, 'hot', ADDR.target, 1000000, 87028, 408171, 560),
+      landed(1, 'cold', ADDR.other, 10000000, 86353, 408103, 970),
+    ];
+    return { S, band, lanes };
+  }
+
+  const nextTicket = (band) => { for (const [leaf, s] of band) if (s === 'phone') return leaf; return null; };
+  const ticketsLeft = (band) => [...band.values()].filter((s) => s === 'phone').length;
+  const BAND_WORDS = { burned: 'burned', phone: 'on the phone', uncut: 'not cut', lit: 'in flight' };
+  const bandCounts = (band) => { const n = { burned: 0, phone: 0, uncut: 0, lit: 0 }; for (const s of band.values()) n[s]++; return n; };
+
+  function actionHTML(l) {
+    const tag = l.mempool === 'public' ? ' <span class="tag">public</span>' : '';
+    if (l.kind === 'policy') return `set hot policy${tag}`;
+    const to = `<span class="mono">${short(l.to)}</span>`;
+    return `${l.mode === 'hot' ? `hot ticket to ${to}` : `pay ${to}`}${tag}`;
+  }
+  function deadlineText(l, now) {
+    const d = Math.ceil((l.deadline - now) / 1000);
+    return l.deadline === null ? 'first deadline 4 s' : d > 0 ? `first deadline in ${d} s` : 'deadline passed: it expires with the next block';
+  }
+  function retryOfHTML(l) {
+    return l.retryOf ? ` <span class="why"><button type="button" class="link" data-go="${l.retryOf}">retry of lane ${l.retryOf}</button>, not re-signed: a fresh leaf on a fresh lane</span>` : '';
+  }
+  function wordsHTML(l, now) {
+    switch (l.state) {
+      case 'signed': return `<b class="state">signed</b> <span class="why">${l.mode === 'hot' ? `from ticket ${l.leaf}` : 'on the cold device'}</span>`;
+      case 'admitted': return `<b class="state">admitted</b>${retryOfHTML(l)}`;
+      case 'pending': return `<b class="state">pending</b> for <span class="since">${Math.max(0, Math.floor((now - l.admittedAt) / 1000))} s</span>${l.stuck ? ` <span class="why dl-left">${deadlineText(l, now)}</span>` : ''}${retryOfHTML(l)}`;
+      case 'included': return `<b class="state">included</b> in block ${num(l.block)}${retryOfHTML(l)}`;
+      case 'refused': return `<b class="state">refused</b>: ${esc(l.reason)} <span class="why">leaf burned</span>`;
+      case 'expired': return `<b class="state">expired</b>, leaf burned${l.retriedAs ? ` <span class="why"><button type="button" class="link" data-go="${l.retriedAs}">retried as lane ${l.retriedAs}</button></span>` : ''}`;
+      default: return esc(l.state);
+    }
+  }
+  function rowHTML(l, now) {
+    const gone = l.state === 'refused' || l.state === 'expired';
+    return `<div role="row" class="lane-row" id="row-${l.key}" data-key="${l.key}" data-state="${l.state}" data-mode="${l.mode}"${l.stuck && inFlight(l) ? ' data-stuck' : ''} style="--p: ${POS[l.state]}">`
+      + `<span role="cell" class="c-lane"><button type="button" class="lane-id" aria-expanded="false" aria-controls="detail-${l.key}" title="Show the admission report">${l.key}</button></span>`
+      + `<span role="cell" class="c-leaf"><span class="lbl">leaf </span>${l.leaf}${l.mode === 'hot' ? ' <span class="hot">hot</span>' : ''}</span>`
+      + `<span role="cell" class="c-action">${actionHTML(l)}</span>`
+      + `<span role="cell" class="c-amount${gone ? ' struck' : ''}" title="${eth(l.value)}, exact">${eth(l.value)}</span>`
+      + `<span role="cell" class="c-gas" title="verify-frame gas"><span class="lbl">gas </span><span class="gas">${l.gas ? num(l.gas) : '—'}</span></span>`
+      + `<span role="cell" class="c-status"><span class="track" aria-hidden="true"><i class="rail"></i><i class="run"></i><i class="tick a"></i><i class="tick p"></i><i class="tick i"></i><i class="dl"></i><i class="sig"></i><i class="marker"></i></span>`
+      + `<span class="words">${wordsHTML(l, now)}</span><a class="explorer" href="#explorer" data-hash="${l.hash}">explorer</a></span>`
+      + '</div>';
+  }
+  function checks(l) {
+    const base = [
+      ['pass', 'prefix shape: expiry, then self verify'],
+      ['pass', 'verify gas declared 95,100 of 100,000 (expiry 5,000, verify 90,000, signature 100)'],
+      ['pass', 'verify frame: allowed opcodes, own storage only'],
+    ];
+    if (l.state === 'signed') return { summary: 'not sent yet', items: [] };
+    if (l.state === 'refused' && l.violation) return { summary: 'refused at admission: the verify frame reverted', items: [...base, ['fail', `verify frame reverted: <span class="v">${esc(l.violation)}</span>`]] };
+    if (l.state === 'refused') return { summary: 'refused by the public mempool: a pending frame transaction from this sender is already in the pool', items: [['fail', 'one pending per sender']] };
+    return { summary: `admitted by the ${l.mempool} mempool: every rule passed`, items: [...base, ['pass', `nonce key <span class="v">${l.key}</span> unused, sequence 0`], ['pass', 'the balance covers every pending lane']] };
+  }
+  function detailHTML(l, clock) {
+    const c = checks(l);
+    const parts = [`<div><h4>Admission report</h4><p>${esc(c.summary)}</p><ul>${c.items.map(([v, t]) => `<li><span class="verdict ${v}">${v}</span> ${t}</li>`).join('')}</ul></div>`];
+    if (l.state === 'included') parts.push(`<div><h4>Receipt</h4><p>block ${num(l.block)}, OnChain, gas used ${num(FEE)}</p></div>`);
+    parts.push(`<div><h4>Timeline</h4><ol>${l.steps.map(([s, t]) => `<li><span class="when">${clock(t)}</span> ${esc(s)}</li>`).join('')}</ol></div>`);
+    const facts = [['transaction', `<span class="v">${l.hash}</span>`], ['lane (nonce key)', `<span class="v">${l.key}</span>`], ['leaf', l.leaf],
+      ['mode', l.mode === 'hot' ? 'hot' : 'keyed'], ['mempool', l.mempool], ['to', `<span class="v">${l.to}</span>`],
+      ['verify gas', l.gas ? num(l.gas) : '—'], ["max cost (the backend's)", eth(l.value + MAXCOST)]];
+    parts.push(`<dl>${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`);
+    parts.push('<p><a href="#explorer" class="explorer" data-hash="' + l.hash + '">Open in the explorer</a> <span class="when">(its history is in memory: a restart clears it)</span></p>');
+    return parts.join('');
+  }
+  const bandHTML = (band) => [...band].map(([leaf, s]) => `<i data-leaf="${leaf}" data-s="${s}" title="leaf ${leaf}: ${BAND_WORDS[s]}"></i>`).join('');
+  function bandKeyHTML(band) {
+    const n = bandCounts(band);
+    return ['burned', 'phone', 'uncut', 'lit'].filter((s) => s !== 'lit' || n.lit).map((s) => `<span><i data-s="${s}" aria-hidden="true"></i>${n[s]} ${BAND_WORDS[s]}</span>`).join(' ');
+  }
+  function bandLabel(band) {
+    const n = bandCounts(band);
+    return `Hot band: ${n.burned} burned, ${n.phone} on the phone, ${n.uncut} not cut${n.lit ? `, ${n.lit} in flight` : ''}`;
+  }
+  function ticketHTML(S, band) {
+    const next = nextTicket(band);
+    if (next === null) return '<span class="stub" aria-hidden="true"></span><div class="t-body"><p class="t-empty">No ticket left. Cut some on the cold device.</p></div>';
+    return `<span class="stub" aria-hidden="true"></span><div class="t-body"><p class="t-leaf">next ticket, leaf <b>${next}</b></p><p class="t-lane mono">lane ${laneKey(S.epoch, next)}</p>`
+      + `<p class="t-terms">up to ${eth(S.valueCap)}, only to <span class="mono">${short(S.target)}</span>; fee up to ${eth(S.feeCap)}</p></div>`;
+  }
+  function setAsideHTML(lanes) {
+    const p = lanes.filter(inFlight);
+    if (!p.length) return 'Set aside for pending: nothing, no lane in flight.';
+    const total = p.reduce((a, l) => a + l.value + MAXCOST, 0);
+    return `Set aside for pending: <b>${eth(total)}</b> on ${p.length} lane${p.length === 1 ? '' : 's'} (${p.length === 1 ? 'its value' : "each lane's value"} plus the maximum cost the backend reports: what the sidecar sets aside).`;
+  }
+  function snapshot(T, clock) {
+    const { S, band, lanes } = initial(T);
+    return {
+      rows: lanes.map((l) => rowHTML(l, T)).join(''), band: bandHTML(band), bandkey: bandKeyHTML(band), ticket: ticketHTML(S, band),
+      setaside: setAsideHTML(lanes), notice: `<span class="when">${clock(lanes[0].admittedAt)}</span> <span>Cold device sent 0.25 ETH on lane 0x2 (leaf 2): admitted.</span>`,
+    };
+  }
+  return { FEE, MAXCOST, POS, ADDR, esc, num, short, eth, laneKey, inFlight, gasFor, lane, initial, nextTicket, ticketsLeft,
+    wordsHTML, rowHTML, detailHTML, bandHTML, bandKeyHTML, bandLabel, ticketHTML, setAsideHTML, deadlineText, snapshot };
+})();
+</script>
+<script>
+/* Behaviour: the chain clock, relay passes, the Pay sequence and the controls. Mempool and chain are simulated. */
+(() => {
+  'use strict';
+  const M = MODEL;
+  const $ = (s, r = document) => r.querySelector(s);
+  const RM = matchMedia('(prefers-reduced-motion: reduce)');
+  const still = () => RM.matches;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const now = () => performance.now();
+  const wall = (t) => { const d = new Date(Date.now() - (now() - t)); return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':'); };
+  const T0 = now();
+  const { S, band, lanes } = M.initial(T0);
+  const el = {
+    rows: $('#rows'), lanes: $('#lanes'), notice: $('#notice'), block: $('#block-no'), hand: $('#hand'), band: $('#band'), bandKey: $('#band-key'),
+    ticket: $('#ticket'), stack: $('#stack'), tLeft: $('#t-left'), tCut: $('#t-cut'), tNote: $('#ticket-note'), inflight: $('#inflight'),
+    inflightN: $('#inflight-n'), inflightWord: $('#inflight-word'), setAside: $('#set-aside'), phoneSetAside: $('#phone-set-aside'),
+    balance: $('#w-balance'), used: $('#w-used'), treeUsed: $('#tree-used'), usedSplit: $('#used-split'), tickets: $('#w-tickets'),
+    cutLeft: $('#cut-left'), cutCount: $('#cut-count'), cut: $('#cut'), pay: $('#pay'), stuck: $('#stuck'), amount: $('#pay-amount'),
+    problem: $('#pay-problem'), payCap: $('#pay-cap'), payTo: $('#pay-to'), foot: $('#foot-block'), play: $('#play'), cold: $('#cold-pane'),
+    coldFields: $('#cold-fields'), offline: $('#offline'), rule: $('#mempool-rule'),
+  };
+
+  /* ---------------------------------------------------------------- drawing */
+  function roll(node, text, animate = true) {
+    const old = node.dataset.v ?? node.textContent;
+    node.dataset.v = text;
+    if (old === text) return;
+    if (!animate || still()) { node.textContent = text; return; }
+    const n = Math.max(old.length, text.length), a = old.padStart(n), b = text.padStart(n);
+    node.textContent = '';
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement('span');
+      c.className = 'rc';
+      if (a[i] === b[i]) c.textContent = b[i];
+      else {
+        c.classList.add('rolling');
+        const o = document.createElement('span'); o.className = 'ro'; o.textContent = a[i];
+        const w = document.createElement('span'); w.className = 'rn'; w.textContent = b[i];
+        c.append(o, w);
+      }
+      node.append(c);
+    }
+    clearTimeout(node.rollTimer);
+    node.rollTimer = setTimeout(() => { if (node.dataset.v === text) node.textContent = text; }, 420);
+  }
+  function note(text, tone = 'ok', t = now()) {
+    const w = document.createElement('span'); w.className = 'when'; w.textContent = wall(t);
+    const s = document.createElement('span'); s.textContent = text; if (tone === 'error') s.className = 'error';
+    el.notice.replaceChildren(w, ' ', s);
+  }
+  const rowOf = (key) => document.getElementById(`row-${key}`);
+  function update(l) {
+    const r = rowOf(l.key);
+    if (!r) return;
+    r.dataset.state = l.state;
+    r.style.setProperty('--p', M.POS[l.state]);
+    r.toggleAttribute('data-stuck', l.stuck && M.inFlight(l));
+    r.querySelector('.words').innerHTML = M.wordsHTML(l, now());
+    r.querySelector('.gas').textContent = l.gas ? M.num(l.gas) : '—';
+    r.querySelector('.c-amount').classList.toggle('struck', l.state === 'refused' || l.state === 'expired');
+    const d = document.getElementById(`detail-${l.key}`);
+    if (d) d.firstElementChild.innerHTML = M.detailHTML(l, wall);
+  }
+  function renderBand() {
+    for (const i of el.band.children) i.dataset.s = band.get(Number(i.dataset.leaf));
+    el.bandKey.innerHTML = M.bandKeyHTML(band);
+    el.band.setAttribute('aria-label', M.bandLabel(band));
+  }
+  function renderTickets(animate = true) {
+    const left = M.ticketsLeft(band);
+    roll(el.tLeft, String(left), animate);
+    roll(el.tCut, String(S.cut), animate);
+    el.tNote.textContent = S.cut === 0 ? 'no tickets yet: cut some on the cold device' : `tickets left of those cut; ${S.cut - left} used or burned`;
+    el.ticket.innerHTML = M.ticketHTML(S, band);
+    el.ticket.classList.toggle('empty', left === 0);
+    el.stack.dataset.edges = String(Math.min(2, Math.max(0, left - 1)));
+  }
+  let lastUncut = -1;
+  function counts(animate = true) {
+    const fl = lanes.filter(M.inFlight).length, left = M.ticketsLeft(band);
+    roll(el.inflightN, String(fl), animate);
+    el.inflightWord.textContent = fl === 1 ? 'lane in flight' : 'lanes in flight';
+    el.inflight.toggleAttribute('data-lit', fl > 0);
+    el.balance.textContent = M.eth(S.balance);
+    const used = M.num(S.coldUsed + S.cut);
+    el.used.textContent = used; el.treeUsed.textContent = used;
+    el.usedSplit.textContent = `${S.cut} hot and ${S.coldUsed} cold`;
+    el.tickets.textContent = `${left} of ${S.cut}`;
+    el.setAside.innerHTML = M.setAsideHTML(lanes);
+    el.phoneSetAside.innerHTML = M.setAsideHTML(lanes);
+    const uncut = [...band.values()].filter((s) => s === 'uncut').length;
+    el.cutLeft.textContent = uncut
+      ? `${uncut} hot ${uncut === 1 ? 'leaf' : 'leaves'} not cut yet; ${S.cut} cut this epoch. Each ticket is one leaf's secrets and path, no seed.`
+      : `Every hot leaf is cut: ${S.cut} this epoch. Each ticket is one leaf's secrets and path, no seed.`;
+    el.cutCount.max = String(Math.max(1, uncut));
+    if (uncut !== lastUncut) { lastUncut = uncut; el.cutCount.value = String(Math.max(1, Math.min(10, uncut))); }
+    el.cut.disabled = uncut === 0; el.cutCount.disabled = uncut === 0;
+    checkAmount();
+  }
+  function flip(mutate) {
+    const kids = [...el.rows.children];
+    const before = new Map(kids.map((k) => [k, k.getBoundingClientRect().top]));
+    mutate();
+    if (still()) return;
+    for (const k of kids) {
+      if (!k.isConnected) continue;
+      const dy = before.get(k) - k.getBoundingClientRect().top;
+      if (Math.abs(dy) > 0.5) k.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.3,.7,.2,1)' });
+    }
+  }
+  function insertRow(l) {
+    flip(() => { el.rows.insertAdjacentHTML('afterbegin', M.rowHTML(l, now())); rowOf(l.key).classList.add('arriving'); });
+  }
+  const arrive = (l) => rowOf(l.key)?.classList.remove('arriving');
+  function flash() {
+    if (still()) return;
+    el.lanes.classList.remove('landing');
+    void el.lanes.offsetWidth;
+    el.lanes.classList.add('landing');
+  }
+
+  /* ---------------------------------------------------------------- the torn ticket */
+  function makeGhost() {
+    const body = el.ticket.querySelector('.t-body');
+    if (!body || still()) return null;
+    const r = body.getBoundingClientRect();
+    const g = document.createElement('div');
+    g.className = 'ghost'; g.setAttribute('aria-hidden', 'true');
+    g.append(body.cloneNode(true));
+    Object.assign(g.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+    document.body.append(g);
+    return g;
+  }
+  async function fly(g, row) {
+    if (!g) return;
+    const a = g.getBoundingClientRect(), b = row?.getBoundingClientRect();
+    const seen = b && b.bottom > 0 && b.top < innerHeight;
+    let frames;
+    if (seen) {
+      const s = Math.min(1, b.height / a.height);
+      frames = [{ transform: 'none', opacity: 1 }, { transform: 'translate(12px, -8px) rotate(-4deg)', opacity: 1, offset: 0.22 },
+        { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${s})`, opacity: 0.15 }];
+    } else {
+      frames = [{ transform: 'none', opacity: 1 }, { transform: 'translate(14px, -10px) rotate(-5deg)', opacity: 1, offset: 0.3 },
+        { transform: 'translate(48px, -36px) rotate(-10deg)', opacity: 0 }];
+    }
+    try { await g.animate(frames, { duration: seen ? 820 : 480, easing: 'cubic-bezier(.45,.05,.2,1)', fill: 'forwards' }).finished; } catch { /* removed */ }
+    g.remove();
+  }
+
+  /* ---------------------------------------------------------------- lanes */
+  const PUBLIC_REFUSAL = 'the public mempool holds one pending per sender';
+  function admit(l) {
+    l.state = 'admitted'; l.admittedAt = now(); l.gas = M.gasFor(l);
+    l.steps.push([l.mempool === 'public' ? 'Submitted to the public mempool' : 'Submitted', now()]);
+    update(l); counts();
+  }
+  function pend(l) {
+    if (l.state !== 'admitted') return;
+    l.state = 'pending';
+    l.steps.push([l.mempool === 'public' ? 'node: pending' : 'sidecar: Pending', now()]);
+    if (l.mempool === 'public') l.relayed = true;
+    if (l.stuck) l.deadline = l.admittedAt + 4000;
+    update(l); counts();
+  }
+  function refuse(l, reason, violation) {
+    l.state = 'refused'; l.reason = reason; l.violation = violation;
+    l.steps.push([`Refused: ${reason}`, now()]);
+    if (l.mode === 'hot') band.set(l.leaf, 'burned');
+    renderBand(); update(l); counts();
+    note(`Lane ${l.key} (${l.mode === 'hot' ? 'ticket' : 'leaf'} ${l.leaf}) refused: ${reason}. Its leaf is burned.`, 'error');
+  }
+  function include(l, block) {
+    if (l.state !== 'pending') return;
+    l.state = 'included'; l.block = block;
+    l.steps.push([`chain: key used by block ${M.num(block)}`, now()], [`OnChain in block ${M.num(block)}`, now()]);
+    S.balance -= l.value + M.FEE;
+    if (l.mode === 'hot') band.set(l.leaf, 'burned');
+    if (l.kind === 'policy' && l.policy) applyPolicy(l.policy);
+    renderBand(); update(l); counts();
+  }
+  let retrying = 0;
+  async function expire(l) {
+    l.state = 'expired';
+    l.steps.push(['Expired: its deadline passed before a block took it', now()]);
+    if (l.mode === 'hot') band.set(l.leaf, 'burned');
+    renderBand(); update(l); counts();
+    note(`Lane ${l.key} (ticket ${l.leaf}) expired: its leaf is burned. One retry goes out on a fresh lane, not re-signed.`);
+    retrying++;
+    try {
+      await sleep(700);
+      await dispatchHot({ retryOf: l, onLane: (r) => { l.retriedAs = r.key; l.steps.push([`retried as lane ${r.key}`, now()]); update(l); } });
+    } finally {
+      retrying--;
+    }
+  }
+  async function dispatchHot({ stuck = false, retryOf = null, onLane = null } = {}) {
+    const leaf = M.nextTicket(band);
+    if (leaf === null) { note('No ticket left on the phone: cut some on the cold device.', 'error'); return null; }
+    const value = retryOf ? retryOf.value : checkAmount();
+    if (value === null) return null;
+    const mempool = retryOf ? retryOf.mempool : S.mempool;  // a retry goes where its first try went
+    const refused = mempool === 'public' && lanes.some(M.inFlight);
+    const ghost = makeGhost();
+    const l = M.lane({ leaf, mode: 'hot', to: S.target, value, state: 'signed', at: now(), mempool, stuck, retryOf: retryOf ? retryOf.key : null }, S.epoch);
+    lanes.unshift(l);
+    onLane?.(l);
+    band.set(leaf, 'lit');
+    insertRow(l);
+    renderBand(); renderTickets(); counts();
+    await fly(ghost, rowOf(l.key));
+    arrive(l);
+    await sleep(260);
+    if (refused) { refuse(l, PUBLIC_REFUSAL, null); return l; }
+    admit(l);
+    note(retryOf
+      ? `Retry of lane ${retryOf.key} on lane ${l.key} (ticket ${leaf}): admitted. Not re-signed: a fresh leaf on a fresh lane.`
+      : stuck
+        ? `Stuck payment on lane ${l.key} (ticket ${leaf}): its first deadline is 4 s, shorter than one 6 s block, so it should miss its block and expire, its ticket burned; then one retry goes out on a fresh lane with the normal deadline.`
+        : `Paid ${M.eth(value)} with ticket ${leaf} on lane ${l.key}: admitted.`);
+    await sleep(600);
+    pend(l);
+    return l;
+  }
+  async function dispatchCold({ kind, to, value, policy = null }) {
+    const refused = S.mempool === 'public' && lanes.some(M.inFlight);
+    const leaf = S.coldNext++;
+    S.coldUsed++;
+    const l = M.lane({ leaf, mode: 'cold', kind, to, value, policy, state: 'signed', at: now(), mempool: S.mempool }, S.epoch);
+    lanes.unshift(l);
+    insertRow(l); counts();
+    await sleep(still() ? 0 : 280);
+    arrive(l);
+    await sleep(260);
+    if (refused) { refuse(l, PUBLIC_REFUSAL, null); return l; }
+    admit(l);
+    await sleep(600);
+    pend(l);
+    return l;
+  }
+  function applyPolicy(p) {
+    S.valueCap = p.valueCap; S.feeCap = p.feeCap; S.target = p.target;
+    el.payTo.value = p.target;
+    el.payCap.textContent = `Hot value cap ${M.eth(p.valueCap)} per payment, fee cap ${M.eth(p.feeCap)}.`;
+    renderTickets(false);
+    note(p.valueCap === 0 ? 'Hot policy included: value cap 0, every ticket is off (the kill switch).' : `Hot policy included: value cap ${M.eth(p.valueCap)}, fee cap ${M.eth(p.feeCap)}.`);
+  }
+  function cutTickets(n) {
+    const take = [...band].filter(([, s]) => s === 'uncut').map(([k]) => k).slice(0, Math.max(0, n | 0));
+    if (!take.length) return 0;
+    take.forEach((leaf, i) => setTimeout(() => {
+      band.set(leaf, 'phone');
+      renderBand();
+      if (i === take.length - 1) { S.cut += take.length; renderTickets(); counts(); }
+    }, still() ? 0 : 80 * i));
+    note(`Cut ${take.length} ticket${take.length === 1 ? '' : 's'} to the phone: leaves ${take[0]} to ${take.at(-1)}.`);
+    return take.length;
+  }
+
+  /* ---------------------------------------------------------------- the chain: blocks every 6 s, relay passes every 10 s */
+  const list = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
+  function restartDial() {
+    el.hand.classList.remove('first');
+    el.hand.style.animation = 'none';
+    void el.hand.getBoundingClientRect();
+    el.hand.style.animation = '';
+  }
+  function foot() { el.foot.textContent = `latest block ${M.num(S.block)}, ${Math.max(0, Math.round((now() - S.headAt) / 1000))} s ago`; }
+  function landBlock() {
+    S.block += 1; S.headAt = now(); S.nextBlockAt += 6000;
+    const b = S.block, t = now();
+    roll(el.block, M.num(b));
+    restartDial();
+    const order = [...el.rows.querySelectorAll('.lane-row')].map((r) => r.dataset.key);
+    const landing = lanes.filter((l) => l.state === 'pending' && l.relayed).sort((x, y) => order.indexOf(x.key) - order.indexOf(y.key));
+    const expiring = lanes.filter((l) => l.state === 'pending' && l.stuck && l.deadline !== null && t >= l.deadline);
+    if (landing.length) {
+      flash();
+      landing.forEach((l, i) => setTimeout(() => include(l, b), still() ? 0 : 160 + i * 120));
+      note(`Block ${M.num(b)} included ${landing.length === 1 ? 'lane' : 'lanes'} ${list(landing.map((l) => l.key))}.`);
+    }
+    expiring.forEach((l) => { void expire(l); });
+    foot();
+  }
+  function relayPass() {
+    lanes.filter((l) => l.state === 'pending' && !l.relayed && !l.stuck && l.mempool === 'alt')
+      .sort((x, y) => x.admittedAt - y.admittedAt).slice(0, 4).forEach((l) => { l.relayed = true; });
+  }
+  const blocks = () => setTimeout(() => { landBlock(); blocks(); }, Math.max(0, S.nextBlockAt - now()));
+  const passes = () => setTimeout(() => { relayPass(); S.nextPassAt += 10000; passes(); }, Math.max(0, S.nextPassAt - now()));
+  setInterval(() => {
+    const t = now();
+    for (const l of lanes) {
+      if (l.state !== 'pending') continue;
+      const r = rowOf(l.key);
+      if (!r) continue;
+      const s = r.querySelector('.since'); if (s) s.textContent = `${Math.max(0, Math.floor((t - l.admittedAt) / 1000))} s`;
+      const d = r.querySelector('.dl-left'); if (d) d.textContent = M.deadlineText(l, t);
+    }
+    foot();
+  }, 1000);
+
+  /* ---------------------------------------------------------------- controls */
+  function parseGwei(text) {
+    const m = /^\s*(\d*)(?:\.(\d*))?\s*$/.exec(text);
+    if (!m || (m[1] === '' && (m[2] ?? '') === '')) return null;
+    const frac = m[2] ?? '';
+    if (frac.length > 9) return null;
+    return Number(m[1] || '0') * 1e9 + Number(frac.padEnd(9, '0') || '0');
+  }
+  function checkAmount() {
+    const g = parseGwei(el.amount.value);
+    const problem = S.valueCap === 0 ? 'hot tickets off: the value cap is 0'
+      : g === null || g === 0 ? 'an amount in ETH, more than 0'
+        : g > S.valueCap ? `more than the hot value cap of ${M.eth(S.valueCap)}` : '';
+    el.problem.hidden = !problem;
+    el.problem.textContent = problem;
+    el.amount.setAttribute('aria-invalid', String(!!problem));
+    const none = M.ticketsLeft(band) === 0;
+    el.pay.disabled = !!problem || none;
+    el.stuck.disabled = !!problem || none;
+    return problem ? null : g;
+  }
+  el.amount.addEventListener('input', checkAmount);
+  $('#pay-form').addEventListener('submit', (ev) => { ev.preventDefault(); if (checkAmount() !== null) void dispatchHot(); });
+  el.stuck.addEventListener('click', () => { if (checkAmount() !== null) void dispatchHot({ stuck: true }); });
+
+  const isAddr = (v) => /^0x[0-9a-fA-F]{40}$/.test(v);
+  $('#transfer-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const to = $('#transfer-to').value.trim(), g = parseGwei($('#transfer-amount').value), p = $('#transfer-problem');
+    const bad = !isAddr(to) ? 'an address, 0x and 40 hex digits' : g === null || g === 0 ? 'an amount in ETH, more than 0' : '';
+    p.hidden = !bad; p.textContent = bad;
+    if (bad) return;
+    const l = await dispatchCold({ kind: 'pay', to, value: g });
+    if (l.state !== 'refused') note(`Sent ${M.eth(g)} from the cold device on lane ${l.key} (leaf ${l.leaf}): admitted.`);
+  });
+  $('#policy-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const v = parseGwei($('#policy-value').value), f = parseGwei($('#policy-fee').value), tgt = $('#policy-target').value.trim(), hs = Number($('#policy-start').value);
+    const p = $('#policy-problem');
+    const bad = v === null ? 'a value cap in ETH (0 is the kill switch)' : f === null ? 'a fee cap in ETH' : !isAddr(tgt) ? 'an allowed target, 0x and 40 hex digits'
+      : !(Number.isInteger(hs) && hs >= 1 && hs <= S.hotStart) ? `a hot start from 1 to ${S.hotStart}: kept or lowered, never raised within an epoch` : '';
+    p.hidden = !bad; p.textContent = bad;
+    if (bad) return;
+    const l = await dispatchCold({ kind: 'policy', to: M.ADDR.wallet, value: 0, policy: { valueCap: v, feeCap: f, target: tgt } });
+    if (l.state !== 'refused') note(`Set policy sent on a cold leaf, lane ${l.key}. The caps change when it is included.`);
+  });
+  $('#cut-form').addEventListener('submit', (ev) => { ev.preventDefault(); cutTickets(Number(el.cutCount.value)); });
+  let armedUntil = 0;
+  $('#rotate-form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const b = $('#rotate');
+    if (Date.now() > armedUntil) {
+      armedUntil = Date.now() + 6000;
+      b.textContent = 'Confirm: rotate root'; b.classList.add('armed');
+      setTimeout(() => { if (Date.now() >= armedUntil) { b.textContent = 'Rotate root'; b.classList.remove('armed'); } }, 6100);
+      return;
+    }
+    armedUntil = 0; b.textContent = 'Rotate root'; b.classList.remove('armed');
+    if (lanes.some(M.inFlight)) { note('Rotation refused: the backend refuses to rotate while a lane is in flight.', 'error'); return; }
+    note('Not simulated in this mock: the real screen sends the rotation on a cold leaf, and the wallet moves to epoch 1 once it is included.');
+  });
+  function setOffline(on) {
+    S.offline = on; el.offline.checked = on;
+    el.cold.classList.toggle('offline', on);
+    el.coldFields.disabled = on;
+  }
+  el.offline.addEventListener('change', () => {
+    setOffline(el.offline.checked);
+    note(el.offline.checked ? 'Cold device offline: the phone keeps paying from its tickets.' : 'Cold device online.');
+  });
+  const RULES = {
+    alt: 'Parallel lanes: one pending per lane (nonce key), relayed at most 4 per 10 s pass.',
+    public: 'One pending per sender: a second lane is refused while one is pending.',
+  };
+  const MEMPOOL_NOTES = {
+    alt: 'Mempool: alt. Parallel lanes: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself; the sidecar relays at most 4 per 10 s pass by default, so they land out of order, 8 lanes over two or more blocks.',
+    public: 'Mempool: public. It holds one pending frame transaction per sender (not yet confirmed on the devnet, whose node may hold lanes with different keys), so a second lane may be refused and its leaf burned.',
+  };
+  function setMempool(m, say = true) {
+    S.mempool = m;
+    for (const i of document.querySelectorAll('input[name="mempool"]')) i.checked = i.value === m;
+    el.rule.textContent = RULES[m];
+    el.lanes.dataset.mempool = m;
+    if (say) note(MEMPOOL_NOTES[m]);
+  }
+  for (const i of document.querySelectorAll('input[name="mempool"]')) i.addEventListener('change', () => setMempool(i.value));
+
+  function toggleDetail(key) {
+    const row = rowOf(key);
+    const btn = row.querySelector('.lane-id');
+    const open = document.getElementById(`detail-${key}`);
+    if (open) { open.remove(); btn.setAttribute('aria-expanded', 'false'); return; }
+    const l = lanes.find((x) => x.key === key);
+    row.insertAdjacentHTML('afterend', `<div role="row" class="detail-row" id="detail-${key}"><div role="cell" class="detail" aria-colspan="6">${M.detailHTML(l, wall)}</div></div>`);
+    btn.setAttribute('aria-expanded', 'true');
+  }
+  function focusLane(key) {
+    const r = rowOf(key);
+    if (!r) return;
+    r.scrollIntoView({ block: 'nearest', behavior: still() ? 'auto' : 'smooth' });
+    r.querySelector('.lane-id').focus({ preventScroll: true });
+    r.classList.add('spot');
+    setTimeout(() => r.classList.remove('spot'), 1400);
+  }
+  el.lanes.addEventListener('click', (ev) => {
+    const t = ev.target instanceof Element ? ev.target : null;
+    if (!t) return;
+    const go = t.closest('[data-go]');
+    if (go) { focusLane(go.dataset.go); return; }
+    const ex = t.closest('a.explorer');
+    if (ex) { ev.preventDefault(); note(`Mock: the real screen opens https://explorer.altmempool.wtf/tx/${ex.dataset.hash}`); return; }
+    const row = t.closest('.lane-row:not(.head)');
+    if (row && !t.closest('.detail-row')) toggleDetail(row.dataset.key);
+  });
+
+  for (const i of document.querySelectorAll('input[name="theme"]')) {
+    i.addEventListener('change', () => { if (i.value) document.documentElement.dataset.theme = i.value; else delete document.documentElement.dataset.theme; });
+  }
+  const asked = new URLSearchParams(location.search).get('theme');
+  if (asked === 'dark' || asked === 'light') {
+    document.documentElement.dataset.theme = asked;
+    const r = document.querySelector(`input[name="theme"][value="${asked}"]`);
+    if (r) r.checked = true;
+  }
+
+  const until = (f, max) => new Promise((res) => { const t0 = now(); const iv = setInterval(() => { if (f() || now() - t0 > max) { clearInterval(iv); res(); } }, 200); });
+  el.play.addEventListener('click', async () => {
+    el.play.disabled = true;
+    try {
+      if (M.ticketsLeft(band) < 7) {
+        const n = cutTickets(10);
+        if (n) await sleep(1300);
+      }
+      setOffline(true);
+      note('Scene: the cold device goes offline; the phone pays from its tickets.');
+      await sleep(1100);
+      setMempool('alt', false);
+      note('Scene: three payments on the alt mempool as parallel lanes, the third one the stuck payment.');
+      const a = dispatchHot(); await sleep(450);
+      const b = dispatchHot(); await sleep(450);
+      const c = dispatchHot({ stuck: true });
+      await Promise.all([a, b, c]);
+      await until(() => !lanes.some(M.inFlight) && retrying === 0, 45000);
+      setMempool('public');
+      await sleep(1600);
+      const d = dispatchHot(); await sleep(1500);
+      void dispatchHot(); await sleep(1500);
+      void dispatchHot();
+      await d; await sleep(2600);
+      note('Scene done: the lanes landed out of order across blocks, the stuck payment expired and its retry landed on a fresh lane, and the public mempool refused the lanes behind a pending one.');
+    } finally {
+      el.play.disabled = false;
+    }
+  });
+
+  /* ---------------------------------------------------------------- start: the same board the snapshot drew, now live */
+  el.rows.innerHTML = lanes.map((l) => M.rowHTML(l, T0)).join('');
+  el.band.innerHTML = M.bandHTML(band);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.band.classList.add('ready')));
+  renderTickets(false);
+  counts(false);
+  note('Cold device sent 0.25 ETH on lane 0x2 (leaf 2): admitted.', 'ok', lanes[0].admittedAt);
+  foot();
+  blocks();
+  passes();
+})();
+</script>
+</body>
+</html>
