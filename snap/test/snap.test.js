@@ -128,3 +128,105 @@ describe("the Winterlock Snap", () => {
     expect(isOriginAllowed(origins, "snap", "npm:some-other-snap")).toBe(false);
   });
 });
+
+describe("the Winterlock Snap as a MetaMask account (ERC-4337 envelope, Nov 6)", () => {
+  const FEES = { maxFeePerGas: "0xee6b2800", maxPriorityFeePerGas: "0xb2d05e00" }; // 4 gwei, 3 gwei tip
+  let n = 0;
+  const reqId = () => `6f9c1d2e-0b7a-4c3d-8e5f-${String(++n).padStart(12, "0")}`;
+
+  async function keyringCall(snap, origin, method, params) {
+    const { response } = await snap.onKeyringRequest({ origin, method, ...(params ? { params } : {}) });
+    if (response.error) throw new Error(`${method}: ${JSON.stringify(response.error)}`);
+    return response.result;
+  }
+  /** What MetaMask sends: keyring_submitRequest for the account, from origin "metamask". */
+  async function submit(snap, account, method, params) {
+    const r = await keyringCall(snap, "metamask", "keyring_submitRequest", {
+      id: reqId(), scope: "eip155:1337", account: account.id, origin: "metamask", request: { method, params },
+    });
+    expect(r.pending).toBe(false);
+    return r.result;
+  }
+  async function withMetaMaskAccount() {
+    const s = await withAccount();
+    const account = await keyringCall(s, ORIGIN, "keyring_createAccount", { options: {} });
+    return { ...s, account };
+  }
+  const userOp = (account, prepared, fees = FEES) => ({
+    sender: account.address, nonce: prepared.nonce, initCode: prepared.initCode, callData: prepared.callData,
+    callGasLimit: prepared.gasLimits.callGasLimit, verificationGasLimit: prepared.gasLimits.verificationGasLimit,
+    preVerificationGas: prepared.gasLimits.preVerificationGas, ...fees, paymasterAndData: "0x", signature: prepared.dummySignature,
+  });
+  const ENTRY = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789";
+  const statusOf = async (s, leaf) => (await call(s.request, "winterlock_status")).leaves.find((l) => l.leaf === leaf);
+
+  it("the page may add the account to MetaMask, as an ERC-4337 account; only MetaMask may ask it to sign", async () => {
+    const s = await withMetaMaskAccount();
+    expect(s.account).toMatchObject({ type: "eip155:erc4337", address: s.used.account, scopes: ["eip155:1337"] });
+    expect(s.account.methods).toEqual(["eth_prepareUserOperation", "eth_patchUserOperation", "eth_signUserOperation"]);
+    await expect(keyringCall(s, ORIGIN, "keyring_createAccount", { options: {} })).rejects.toThrow(/already in MetaMask/);
+    expect(await keyringCall(s, "metamask", "keyring_listAccounts")).toEqual([s.account]);
+    const asPage = { id: reqId(), scope: "eip155:1337", account: s.account.id, origin: ORIGIN, request: { method: "eth_prepareUserOperation", params: [{ to: TO, value: "0x3e8", data: "0x" }] } };
+    await expect(keyringCall(s, ORIGIN, "keyring_submitRequest", asPage)).rejects.toThrow(/may not call keyring_submitRequest/);
+    await expect(keyringCall(s, "https://example.com", "keyring_listAccounts")).rejects.toThrow(/may not call/);
+    await expect(keyringCall(s, "metamask", "keyring_createAccount", { options: {} })).rejects.toThrow(/may not call/);
+  });
+
+  it("prepare reserves a fresh leaf and names the bundler; sign signs it once, at the user's fees", async () => {
+    const s = await withMetaMaskAccount();
+    const prepared = await submit(s, s.account, "eth_prepareUserOperation", [{ to: TO, value: "0x3e8", data: "0x" }]);
+    expect(prepared).toMatchObject({ nonce: "0x10000000000000000", initCode: "0x", bundlerUrl: "http://127.0.0.1:15192/rpc", dummyPaymasterAndData: "0x" });
+    expect(prepared.callData.startsWith("0x574c0001")).toBe(true);
+    expect(await statusOf(s, 1)).toMatchObject({ status: "reserved", via: "MetaMask" });
+    expect(await submit(s, s.account, "eth_patchUserOperation", [userOp(s.account, prepared)])).toEqual({ paymasterAndData: "0x" });
+    const decoded = await submit(s, s.account, "eth_decodeUserOperationCallData", [prepared.callData]);
+    expect(decoded).toEqual([{ to: TO, value: "0x3e8", data: "0x" }]);
+
+    const op = userOp(s.account, prepared);
+    const raw = await submit(s, s.account, "eth_signUserOperation", [op]); // what MetaMask sends: the user operation alone
+    expect(raw).toMatch(/^0x06[0-9a-f]+$/);
+    expect(raw.length).toBeGreaterThan(2 * 2594);
+    const lane = await statusOf(s, 1);
+    expect(lane).toMatchObject({ status: "submitted", via: "MetaMask" });
+    expect(lane.txHash).toMatch(/^0x[0-9a-f]{64}$/);
+
+    // The same user operation again, or another fee on the same leaf: never a second signature.
+    await expect(submit(s, s.account, "eth_signUserOperation", [op, ENTRY])).rejects.toThrow(/is submitted: this Snap signs a prepared leaf once/);
+    await expect(submit(s, s.account, "eth_signUserOperation", [{ ...op, maxFeePerGas: "0x12a05f200" }, ENTRY])).rejects.toThrow(/signs a prepared leaf once/);
+    // A second prepare gets the next leaf.
+    const next = await submit(s, s.account, "eth_prepareUserOperation", [{ to: TO, value: "0x1", data: "0x" }]);
+    expect(next.nonce).toBe("0x20000000000000000");
+  });
+
+  it("signs nothing for a user operation it did not prepare, below the tip floor, or for another account", async () => {
+    const s = await withMetaMaskAccount();
+    const prepared = await submit(s, s.account, "eth_prepareUserOperation", [{ to: TO, value: "0x3e8", data: "0x" }]);
+    const op = userOp(s.account, prepared);
+    const other = "0x000000000000000000000000000000000000dEaD";
+    const cases = [
+      [{ ...op, callData: `0x574c0001${prepared.callData.slice(10).replace(TO.slice(2), other.slice(2).toLowerCase())}` }, /not the one this Snap prepared/],
+      [{ ...op, preVerificationGas: "0x1" }, /not the one this Snap prepared/],
+      [{ ...op, maxPriorityFeePerGas: "0x3b9aca00" }, /below the devnet's 3000000000 wei tip floor/],
+      [{ ...op, maxFeePerGas: "0x1", maxPriorityFeePerGas: "0xb2d05e00" }, /below maxPriorityFeePerGas/],
+      [{ ...op, sender: other }, /not this Snap's account/],
+      [{ ...op, nonce: "0x50000000000000000" }, /was never prepared/],
+      [{ ...op, nonce: "0x10000000000000001" }, /sequence must be 0/],
+    ];
+    for (const [bad, why] of cases) await expect(submit(s, s.account, "eth_signUserOperation", [bad, ENTRY])).rejects.toThrow(why);
+    await expect(submit(s, s.account, "eth_signUserOperation", [op, "0x0000000000000000000000000000000000000001"])).rejects.toThrow(/entry point/);
+    // Nothing signed: the prepared leaf is still reserved, and signs fine with the right fees.
+    expect(await statusOf(s, 1)).toMatchObject({ status: "reserved" });
+    expect(await submit(s, s.account, "eth_signUserOperation", [op, ENTRY])).toMatch(/^0x06/);
+  });
+
+  it("refuses a send to itself or above the balance with no leaf used, and a lane its gas cannot pay with nothing signed", async () => {
+    const s = await withMetaMaskAccount(); // the stand-in chain gives the account 1 ETH
+    await expect(submit(s, s.account, "eth_prepareUserOperation", [{ to: s.account.address, value: "0x1", data: "0x" }])).rejects.toThrow(/admin call/);
+    await expect(submit(s, s.account, "eth_prepareUserOperation", [{ to: TO, value: "0x1bc16d674ec80000", data: "0x" }])).rejects.toThrow(/No leaf was used/);
+    expect((await call(s.request, "winterlock_status")).leaves).toEqual([]);
+    // 1 ETH fits before gas, so prepare reserves; at sign the gas does not fit beside it: nothing signs.
+    const prepared = await submit(s, s.account, "eth_prepareUserOperation", [{ to: TO, value: "0xde0b6b3a7640000", data: "0x" }]);
+    await expect(submit(s, s.account, "eth_signUserOperation", [userOp(s.account, prepared), ENTRY])).rejects.toThrow(/can cost up to .* Nothing was signed/);
+    expect(await statusOf(s, 1)).toMatchObject({ status: "reserved", via: "MetaMask" });
+  });
+});

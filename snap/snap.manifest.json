@@ -1,13 +1,13 @@
 {
-  "version": "0.1.0",
-  "description": "Winterlock: a post-quantum account on frame transactions. One-time WOTS+ keys from this Snap's entropy, one nonce key per signature.",
+  "version": "0.2.3",
+  "description": "Winterlock: a post-quantum account on frame transactions, also usable as a MetaMask account. One-time WOTS+ keys from this Snap's entropy, one nonce key per signature.",
   "proposedName": "Winterlock",
   "repository": {
     "type": "git",
     "url": "https://github.com/vickyshaw29/winterlock-wallet.git"
   },
   "source": {
-    "shasum": "ighD3J+qvUDISi6oxg6cuIAqzknniyw8jpH8Y5JZ7GY=",
+    "shasum": "XK7H6JdZS1fFm0t+37AiDF9q3iRcwEnu056e0ZyXEj0=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
@@ -23,7 +23,11 @@
     "endowment:network-access": {},
     "snap_dialog": {},
     "snap_getEntropy": {},
-    "snap_manageState": {}
+    "snap_manageState": {},
+    "endowment:keyring": {
+      "allowedOrigins": ["http://localhost:15190", "http://127.0.0.1:15190"]
+    },
+    "snap_manageAccounts": {}
   },
   "platformVersion": "12.1.0",
   "manifestVersion": "0.1"
