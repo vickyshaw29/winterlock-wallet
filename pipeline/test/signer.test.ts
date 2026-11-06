@@ -11,7 +11,7 @@ const BOB = "0x5544596212F91984C986A919C8026DF0576816f9";
 
 /** Stand-in for the hashsig CLI: right length, deterministic bytes. */
 const fakeHashSigner = (height: number, wrongLength = false): HashSigner => ({
-  height,
+  height, generation: 0, treeSeed: "0x",
   async sign({ leaf }) {
     const body = new Uint8Array(hashEntryLength(height) - 2 + (wrongLength ? 1 : 0)).fill(leaf % 256);
     return concat(["0x0100", toHex(body)]);
@@ -57,7 +57,7 @@ describe("two-pass signing", () => {
 
   test("the hash signer is asked for this transaction's sig hash and leaf", async () => {
     let asked: { leaf: number; msg: Hex; chainId: bigint } | undefined;
-    const spy: HashSigner = { height: 10, async sign(req) { asked = req; return fakeHashSigner(10).sign(req); } };
+    const spy: HashSigner = { ...fakeHashSigner(10), async sign(req) { asked = req; return fakeHashSigner(10).sign(req); } };
     const slots = hybrid(spy, 9);
     const { sigHash } = await signFrameTx(unsigned(slots), slots);
     expect(asked).toEqual({ leaf: 9, msg: sigHash, chainId: 1337n });

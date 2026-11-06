@@ -12,11 +12,30 @@ export const hashEntryLength = (height: number) => 2 + 2_144 + 32 * (height + 4)
 
 const SECP256K1_HALF_N = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0n;
 
-/** Produces the hash-based signature entry for one leaf over one 32-byte message. */
+/**
+ * Produces the hash-based signature entry for one leaf over one 32-byte message. It names the tree it signs
+ * from (tree seed, generation, height), so the pipeline can check it against the journal before any leaf is used.
+ */
 export interface HashSigner {
   height: number;
+  /** the tree's generation, which must equal the account's epoch (spec, Key derivation) */
+  generation: number;
+  /** the tree seed T, public: the account stores it */
+  treeSeed: Hex;
   sign(req: { chainId: bigint; leaf: number; msg: Hex }): Promise<Hex>;
 }
+
+/**
+ * For accounts running the placeholder verifier only, which checks just that the entry carries the message hash.
+ * The real verifier refuses this entry, and it holds no key material.
+ */
+export const placeholderSigner = (tree: { treeSeed: Hex; generation?: number; height?: number }): HashSigner => {
+  const height = tree.height ?? 10;
+  return {
+    height, generation: tree.generation ?? 0, treeSeed: tree.treeSeed,
+    async sign({ msg }) { return concat(["0x0100", msg, toHex(new Uint8Array(hashEntryLength(height) - 34))]); },
+  };
+};
 
 export type SignatureSlot =
   /** signer "0x" means tx.sender (a plain EOA); the account's hybrid co-signer passes the owner address */
@@ -72,9 +91,9 @@ export class HashSignerError extends Error {
  * both the spec and the plan accept, so it never appears as an argument.
  * VERIFY against the published CLI: the --chains format (comma-separated here) and the output fields.
  */
-export function cliHashSigner(opts: { bin: string; seedFile: string; height: number; generation: number; chains: bigint[] }): HashSigner {
+export function cliHashSigner(opts: { bin: string; seedFile: string; height: number; generation: number; treeSeed: Hex; chains: bigint[] }): HashSigner {
   return {
-    height: opts.height,
+    height: opts.height, generation: opts.generation, treeSeed: opts.treeSeed,
     async sign({ chainId, leaf, msg }) {
       const seed = (await Bun.file(opts.seedFile).text()).trim();
       const proc = Bun.spawn(

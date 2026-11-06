@@ -27,9 +27,6 @@ export const splitNonceKey = (key: bigint) => ({ epoch: Number(key >> 32n), leaf
 /** Every hash-signed transaction. */
 export const keyedNonce = (epoch: number, leaf: number): NonceFields => ({ keys: [nonceKeyFor(epoch, leaf)], seq: 0n });
 
-/** The deployment transaction only: on the devnet the legacy nonce is the key list [0] (Day-0). */
-export const legacyNonce = (accountNonce: bigint): NonceFields => ({ keys: [0n], seq: accountNonce });
-
 /** NONCE_MANAGER storage slot holding (sender, key)'s sequence: keccak256(pad32(sender) ‖ key). */
 export const nonceManagerSlot = (sender: Address, key: bigint): Hex => keccak256(concat([pad(sender), pad(toHex(key))]));
 
