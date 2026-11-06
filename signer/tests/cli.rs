@@ -130,6 +130,11 @@ fn error_codes() {
     for (args, seed, want) in cases {
         assert_eq!(code(signer(&args, seed)), want, "{args}");
     }
+    let missing = signer("keygen --chains 1337", Some(SEED)).unwrap_err();
+    assert!(
+        missing.0 == "bad_args" && missing.1.contains("--height"),
+        "the detail names the missing flag: {missing:?}"
+    );
     assert_eq!(
         code(verify(&tree, 1337, 2, &entry[..entry.len() - 2])),
         "bad_entry_length"
