@@ -121,16 +121,16 @@ describe("the ticket device", () => {
 });
 
 describe("parallel lanes in words", () => {
-  test("the devnet sidecar's limits as the spec states them; the draft's numbers labelled; public one per sender not confirmed", () => {
+  test("the devnet sidecar's limits as the spec states them; the draft's numbers labelled; public one per sender as measured", () => {
     const t = flows.LANE_LIMITS_TEXT;
     for (const words of [
       "Parallel lanes", "1 pending per lane (nonce key)", "no per-sender cap for keyed lanes the account pays for itself",
       "relayed at most 4 per 10 s pass by default, so 8 lanes land over two or more blocks",
       "The ERC-8421 draft's numbers, 4 per key and 64 per unstaked sender, are the draft's, not the devnet's",
-      "one pending per sender: not yet confirmed on the devnet",
+      "one pending per sender: measured on the devnet: 1 of 8 admitted, block 5,738",
     ]) expect([words, t.includes(words)]).toEqual([words, true]);
     expect(flows.mempoolNotice("alt")).toBe("Mempool: alt. Parallel lanes: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself; the sidecar relays at most 4 per 10 s pass by default, so they land out of order, 8 lanes over two or more blocks.");
-    expect(flows.mempoolNotice("public")).toContain("one pending frame transaction per sender (not yet confirmed on the devnet");
+    expect(flows.mempoolNotice("public")).toContain("one pending frame transaction per sender (measured on the devnet: 1 of 8 admitted, block 5,738)");
   });
 });
 

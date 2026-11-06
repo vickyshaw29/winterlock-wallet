@@ -583,10 +583,44 @@ function renderLanes() {
       status.append(why);
     }
     const href = safeHref(l.explorerUrl) ?? (isTxHash(l.txHash) ? txUrl(l.txHash) : null);
-    const tx = href ? link(href, short(l.txHash ?? href, 10, 6)) : "–";
-    tr.append(cell(String(l.leaf)), cell(String(l.nonceKey ?? "–")), status, cell(tx));
+    const tx = cell(href ? link(href, short(l.txHash ?? href, 10, 6)) : "–");
+    const proof = l.status === "onchain" && isTxHash(l.txHash) ? receiptLine(l.txHash) : null;
+    if (proof) {
+      const line = document.createElement("span");
+      line.className = "why";
+      line.textContent = proof;
+      tx.append(line);
+    }
+    tr.append(cell(String(l.leaf)), cell(String(l.nonceKey ?? "–")), status, tx);
     return tr;
   }));
+}
+
+// Receipts of landed lanes, read from the node once each: the transaction type and every frame's status show the
+// payment landed as a frame transaction.
+const receipts = new Map();
+function receiptLine(hash) {
+  const r = receipts.get(hash);
+  if (r === undefined) {
+    receipts.set(hash, null);
+    fetch(DEVNET.rpcUrls[0], {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [hash] }),
+    })
+      .then((res) => res.json())
+      .then(({ result }) => {
+        if (!result) return receipts.delete(hash);
+        receipts.set(hash, result);
+        renderLanes();
+      })
+      .catch(() => receipts.delete(hash));
+    return null;
+  }
+  if (!r) return null;
+  const frames = Array.isArray(r.frameReceipts) ? r.frameReceipts : [];
+  const ok = frames.filter((f) => f.status === "0x1").length;
+  return `type ${r.type} · ${ok} of ${frames.length} frames ok · ${BigInt(r.gasUsed).toLocaleString("en-US")} gas`;
 }
 
 // The key sheet: one square per leaf of the Snap's tree, filled by the state winterlock_status reports for it.

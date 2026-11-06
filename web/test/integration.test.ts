@@ -363,7 +363,7 @@ describe("scenes (Play scene), through the proxy against the backend's fakes", (
       ["send", { to: TARGET, valueWei: "1000000000000000", mode: "hot", mempool: "alt", firstAttemptExpirySeconds: 4, retries: 1 }],
       ["send", flows.payBody({ ...at, mempool: "public" })], ["send", flows.payBody({ ...at, mempool: "public" })], ["send", flows.payBody({ ...at, mempool: "public" })],
     ]);
-    expect(steps).toContain("the mempool switches to public (one pending per sender: not yet confirmed on the devnet); the phone pays three more times");
+    expect(steps).toContain("the mempool switches to public (one pending per sender: measured on the devnet: 1 of 8 admitted, block 5,738); the phone pays three more times");
     expect(steps.find((t) => t.startsWith("3 parallel lanes pending at once: "))).toContain("the stuck one's first deadline is 4 s, shorter than one 6 s block");
     expect([offline, mempools]).toEqual([[false, true], ["alt", "public"]]); // online to cut, then offline to pay
     expect(out.alt.every((o) => o.answer !== null)).toBe(true);
