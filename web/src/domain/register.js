@@ -94,4 +94,3 @@ export function stubsOf(view, states) {
   for (let i = band.from; i <= band.to; i++) out.push({ leaf: i, state: /** @type {LeafState} */ (states[i] ?? "phone"), next: i === next });
   return out;
 }
-
