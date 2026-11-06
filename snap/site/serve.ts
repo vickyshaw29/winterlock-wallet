@@ -1,16 +1,16 @@
-// Serves the Snap's companion page and an explicit allowlist of shared UI assets on 127.0.0.1, port 15190 by default:
-// the origin the Snap answers (snap.manifest.json, endowment:rpc allowedOrigins). A strict
-// Content-Security-Policy: scripts and styles from this origin, connections only to the devnet node and gateway.
+// Serves the Snap's companion page (index.html, app.js, style.css) on 127.0.0.1, port 15190 by default: the origin the
+// Snap answers (snap.manifest.json, endowment:rpc allowedOrigins). These three files only, with a strict
+// Content-Security-Policy: scripts and styles from this origin, connections only to the devnet node and gateway and
+// the local bundler's health (http://127.0.0.1:15192).
 //   bun snap/site/serve.ts            (WL_SNAP_SITE_PORT, default 15190), then open http://localhost:15190
-// Written with Claude Code (AI) for Vicky. Shared UI assets added with Codex (OpenAI) for Vicky.
+// Written with Claude Code (AI) for Vicky.
 import path from "node:path";
 
 export const CSP = [
   "default-src 'none'",
   "script-src 'self'",
   "style-src 'self'",
-  "font-src 'self'",
-  "connect-src 'self' https://altmempoolgateway.forshtat.com https://altmempool.forshtat.com",
+  "connect-src 'self' https://altmempoolgateway.forshtat.com https://altmempool.forshtat.com http://127.0.0.1:15192",
   "img-src 'self' data:",
   "base-uri 'none'",
   "form-action 'none'",
@@ -22,14 +22,6 @@ const FILES: Record<string, { file: string; type: string }> = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
-  "/workspace.css": { file: "workspace.css", type: "text/css; charset=utf-8" },
-  "/theme.css": { file: "theme.css", type: "text/css; charset=utf-8" },
-  "/shell.js": { file: "shell.js", type: "text/javascript; charset=utf-8" },
-  "/activity.js": { file: "activity.js", type: "text/javascript; charset=utf-8" },
-  "/fonts/archivo-latin.woff2": { file: "fonts/archivo-latin.woff2", type: "font/woff2" },
-  "/fonts/besley-latin.woff2": { file: "fonts/besley-latin.woff2", type: "font/woff2" },
-  "/fonts/OFL-Archivo.txt": { file: "fonts/OFL-Archivo.txt", type: "text/plain; charset=utf-8" },
-  "/fonts/OFL-Besley.txt": { file: "fonts/OFL-Besley.txt", type: "text/plain; charset=utf-8" },
 };
 
 const HEADERS = {

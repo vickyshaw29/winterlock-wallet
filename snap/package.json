@@ -1,6 +1,6 @@
 {
   "name": "winterlock-snap",
-  "version": "0.1.0",
+  "version": "0.2.3",
   "description": "Winterlock in MetaMask Flask: a post-quantum account on EIP-8141 frame transactions, one WOTS+ leaf per nonce key",
   "repository": {
     "type": "git",
@@ -20,7 +20,9 @@
   },
   "dependencies": {
     "@metamask/snaps-sdk": "12.1.0",
-    "@winterlock/pipeline": "link:../pipeline"
+    "@winterlock/pipeline": "link:../pipeline",
+    "@metamask/keyring-api": "24.3.0",
+    "@metamask/keyring-snap-sdk": "10.0.1"
   },
   "devDependencies": {
     "@metamask/snaps-cli": "8.4.1",
