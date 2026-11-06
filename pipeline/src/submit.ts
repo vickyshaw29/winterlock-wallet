@@ -270,7 +270,15 @@ export interface SubmittedInfo {
    * sets aside for the payer while the lane is pending (parallel lanes, Nov 6)
    */
   simulation: SimulationResult | null;
+  /** the grinding that fixed this transaction's message, or null when it was not ground (Nov 6: the gas gauge) */
+  grind: GrindInfo | null;
 }
+
+/**
+ * How a send was ground: the field varied, the chain steps of the signed message, the most the declared verify limit
+ * allows (maxStepsFor), and every value tried in order with its message's chain steps; the last try is the one signed.
+ */
+export interface GrindInfo { field: "maxFeePerGas" | "lastFrameGas"; steps: number; maxSteps: number; tries: GrindTry<bigint>[] }
 
 export interface SendKeyedResult extends InclusionResult {
   leaf: number;
@@ -280,7 +288,7 @@ export interface SendKeyedResult extends InclusionResult {
   simulation: SimulationResult | null;
   admission: AdmissionReport | null;
   /** present when the send was ground: the chain steps of the signed message and every value tried of the field ground */
-  grind: { field: "maxFeePerGas" | "lastFrameGas"; steps: number; maxSteps: number; tries: GrindTry<bigint>[] } | null;
+  grind: GrindInfo | null;
 }
 
 export type SendStage = "check" | "prepare" | "sign" | "preflight" | "submit" | "follow";
@@ -294,6 +302,8 @@ export interface SendErrorInfo {
   admission?: AdmissionReport | null;
   /** the node's dry run, when one ran: a refusal's verify gas and revert reason are in it */
   simulation?: SimulationResult | null;
+  /** the grinding of the transaction that failed, when it was ground before the failure (a refusal's gas gauge) */
+  grind?: GrindInfo | null;
   cause?: unknown;
 }
 
@@ -311,6 +321,7 @@ export class SendError extends Error {
   readonly deadline: number | null;
   readonly admission: AdmissionReport | null;
   readonly simulation: SimulationResult | null;
+  readonly grind: GrindInfo | null;
   constructor(message: string, info: SendErrorInfo) {
     super(message, { cause: info.cause });
     this.stage = info.stage;
@@ -320,6 +331,7 @@ export class SendError extends Error {
     this.deadline = info.deadline ?? null;
     this.admission = info.admission ?? null;
     this.simulation = info.simulation ?? null;
+    this.grind = info.grind ?? null;
   }
 }
 /** The node's dry run said the transaction is invalid. Its leaf is burned. */
@@ -407,7 +419,7 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
   //    this one in the same process cannot take the leaf in between, and a failed check reserves nothing.
   let leaf: number, nonceKey: bigint, slots: SignatureSlot[], unsigned: FrameTransaction;
   const deadline = baseDeadline;
-  let ground: SendKeyedResult["grind"] = null;
+  let ground: GrindInfo | null = null;
   for (;;) {
     const next = peek();
     let seq: bigint;
@@ -445,7 +457,7 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
     if (leaf !== next.leaf) throw new Error(`internal: reserved leaf ${leaf}, checked leaf ${next.leaf}`); // impossible with no await between
     break;
   }
-  const at = (stage: SendStage, extra: Omit<SendErrorInfo, "stage" | "leaf" | "nonceKey"> = {}): SendErrorInfo => ({ stage, leaf, nonceKey, ...extra });
+  const at = (stage: SendStage, extra: Omit<SendErrorInfo, "stage" | "leaf" | "nonceKey"> = {}): SendErrorInfo => ({ stage, leaf, nonceKey, grind: ground, ...extra });
 
   // 1b. A journal that stores after its methods return (a Snap's) must have stored the reservation before the leaf
   //     signs. LeafJournal stores synchronously and has no durable(): nothing waits here for it.
@@ -531,7 +543,7 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
     // The caller's bookkeeping must never change what happens to a transaction that has left: note it and go on.
     const noteFailure = (e: unknown) => { try { j.note(leaf, `onSubmitted failed: ${message(e)}`); } catch { /* the journal is closed */ } };
     try {
-      const r: unknown = p.onSubmitted({ leaf, nonceKey, txHash, deadline, altHashes: [...altHashes], accepted, simulation });
+      const r: unknown = p.onSubmitted({ leaf, nonceKey, txHash, deadline, altHashes: [...altHashes], accepted, simulation, grind: ground });
       if (r instanceof Promise) r.catch(noteFailure);
     } catch (e) {
       noteFailure(e);
