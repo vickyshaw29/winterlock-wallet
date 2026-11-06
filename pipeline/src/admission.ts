@@ -4,7 +4,8 @@
 import { keccak256, type Hex } from "viem";
 import { encodeRawFrameTx } from "./codec/codec.ts";
 import type { FrameTransaction } from "./codec/FrameTx.ts";
-import { gateway, type SimulationResult } from "./rpc.ts";
+import type { SimulationResult } from "./rpc.ts";
+import { defaultNetwork, type Network } from "./network.ts";
 
 /** keccak256(0x06 ‖ rlp(tx)) over the signed transaction: the hash the sidecar files it under, even when refused. */
 export const frameTxHash = (tx: FrameTransaction): Hex => keccak256(encodeRawFrameTx(tx));
@@ -30,8 +31,8 @@ export interface AdmissionReport {
 }
 
 /** The admission record the submission endpoint keeps for this hash (in memory: gone after a sidecar restart). */
-export async function admissionReport(txHash: Hex): Promise<AdmissionReport | null> {
-  const record = await gateway.explorerRecord(txHash).catch(() => null);
+export async function admissionReport(txHash: Hex, net: Network = defaultNetwork): Promise<AdmissionReport | null> {
+  const record = await net.gateway.explorerRecord(txHash).catch(() => null);
   return record?.admission ? parseAdmissionRecord(txHash, record.admission) : null;
 }
 

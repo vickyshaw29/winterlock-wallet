@@ -1,9 +1,30 @@
 // Devnet endpoints and protocol constants. Every value here was checked on the devnet on
 // 2026-11-05 (spec, Day-0 results). Override the endpoints with env vars to switch devnet.
+// Browser- and Snap-safe (Nov 6): the WL_* variables are read only where a `process` exists (Node, Bun), so importing
+// this file never throws in a browser or a MetaMask Snap, where DEVNET keeps the defaults below. Code there passes its
+// own endpoints to createPipeline (pipeline.ts) instead of relying on DEVNET.
 import type { Address } from "viem";
 
-const env = (name: string, fallback: string) => process.env[name] ?? fallback;
+/** process.env where there is one; undefined in a browser or a Snap, which have no `process` global. */
+const processEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+const env = (name: string, fallback: string) => processEnv?.[name] ?? fallback;
 
+/** One network the pipeline talks to. */
+export interface NetworkConfig {
+  chainId: bigint;
+  /** ethrex node: standard eth_* reads, ethrex_simulateFrameTransaction, the public mempool */
+  node: string;
+  /** sidecar gateway: eth_sendFrameTransaction, status, receipts, gas price, faucet, explorer records */
+  gateway: string;
+  explorer: string;
+  /** seconds per block */
+  blockTime: number;
+}
+
+/**
+ * The default network, from the WL_* variables when this file loads. Node code (backend, scripts, tests) reaches it
+ * through the module-level gateway, node and send functions; createPipeline makes networks of its own.
+ */
 export const DEVNET = {
   chainId: BigInt(env("WL_CHAIN_ID", "1337")),
   /** ethrex node: standard eth_* reads, ethrex_simulateFrameTransaction, the public mempool */
@@ -13,7 +34,7 @@ export const DEVNET = {
   explorer: env("WL_EXPLORER_URL", "https://explorer.altmempool.wtf"),
   /** seconds per block, measured */
   blockTime: 6,
-} as const;
+} as const satisfies NetworkConfig;
 
 /** Live at the short address, not the EIP's 0x81413f0c…FfFf (Day-0). Data: 8-byte big-endian deadline. */
 export const EXPIRY_VERIFIER: Address = "0x0000000000000000000000000000000000008141";
