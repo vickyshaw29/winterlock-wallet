@@ -33,7 +33,7 @@ beforeEach(async () => {
 afterEach(async () => { await h.destroy(); });
 
 const args = (over: Partial<Args> = {}): Args => ({
-  command: "burst", wallet: a, n: 8, mode: "keyed", valueWei: "1000", to: null, mempool: "alt", force: false, jsonOut: null, ...over,
+  command: "burst", wallet: a, n: 8, mode: "keyed", valueWei: "1000", to: null, mempool: "alt", expirySeconds: 180, force: false, jsonOut: null, ...over,
 });
 /** Lines the CLI prints, and the burst's options with a fast poll. */
 function capture() {
@@ -51,7 +51,7 @@ describe("plan", () => {
     expect(lines[0]).toBe(`parallel lanes plan for ${a}: 8 lanes at once, keyed, each sending 1,000 wei (0.000000000000001 ETH) to ${p.to}`);
     expect(lines).toContain(`  set aside with the new lanes: ${weiText(p.setAsideWei)} of a balance of 20,000,000,000,000,000 wei (0.02 ETH): affordable`);
     expect(lines).toContain("  relay: 4 lanes per pass, a pass every 10 s (read from the sidecar), bundling auto");
-    expect(lines).toContain("  8 lanes need 2 relay passes: the last should land about 38 s after the send (an estimate: 28 s for one lane, measured Nov 5, plus one interval per further pass); each lane's deadline is 90 s");
+    expect(lines).toContain("  8 lanes need 2 relay passes: the last should land about 38 s after the send (an estimate: 28 s for one lane, measured Nov 5, plus one interval per further pass); each lane's deadline is 180 s");
     expect(lines).toContain("  cold leaves for keyed lanes left: 11");
     expect(h.coldJournal(a).leaves).toEqual({}); // a plan reserves nothing
   });
@@ -79,6 +79,8 @@ describe("burst", () => {
 
     expect([r.sent, r.admitted, r.maxPending, r.unfinished, r.noAnswer, r.found, r.unaccounted]).toEqual([true, 8, 8, 0, 0, [], 0]);
     expect(r.lanes.every((l) => l.httpStatus === 200 && l.record?.status === "OnChain")).toBe(true);
+    // a burst's deadline is 180 s, not the 90 s of a single send (spec "Fees", Nov 6)
+    for (const l of r.lanes) expect(Math.abs(l.record!.deadline! - Date.parse(l.record!.createdAt) / 1000 - 180)).toBeLessThan(5);
     expect(new Set(r.lanes.map((l) => l.answer!.leaf)).size).toBe(8);
     expect(new Set(r.lanes.map((l) => l.answer!.nonceKeys[0])).size).toBe(8);
     expect(r.blocks).toHaveLength(2);
@@ -247,8 +249,9 @@ describe("lost answers: a send whose answer is lost may have been sent", () => {
 describe("arguments and errors", () => {
   test("parseArgs: defaults, and every mistake named", () => {
     expect(parseArgs(["burst", "--wallet", `0x${"ab".repeat(20)}`, "--n", "8"])).toEqual({
-      command: "burst", wallet: `0x${"ab".repeat(20)}`, n: 8, mode: "keyed", valueWei: "0", to: null, mempool: "alt", force: false, jsonOut: null,
+      command: "burst", wallet: `0x${"ab".repeat(20)}`, n: 8, mode: "keyed", valueWei: "0", to: null, mempool: "alt", expirySeconds: 180, force: false, jsonOut: null,
     });
+    expect(parseArgs(["plan", "--wallet", `0x${"ab".repeat(20)}`, "--n", "4", "--expiry-seconds", "300"]).expirySeconds).toBe(300);
     const w = ["--wallet", `0x${"ab".repeat(20)}`];
     const bad: [string[], RegExp][] = [
       [[], /say plan or burst/], [["send"], /unknown command send/], [["plan", "--n", "8"], /--wallet must be/],
@@ -257,6 +260,8 @@ describe("arguments and errors", () => {
       [["plan", ...w, "--n", "8", "--value-wei", "1.5"], /--value-wei must be a whole number of wei/], [["plan", ...w, "--n", "8", "--to", "0x12"], /--to must be an address/],
       [["plan", ...w, "--n", "8", "--force"], /--force is for burst only/], [["plan", ...w, "--n", "8", "--n", "9"], /--n is given twice/],
       [["plan", ...w, "--n"], /--n needs a value/], [["plan", ...w, "--n", "8", "--speed", "1"], /unknown argument --speed/],
+      [["burst", ...w, "--n", "8", "--expiry-seconds", "9"], /--expiry-seconds must be a whole number of seconds from 10 to 3600/],
+      [["burst", ...w, "--n", "8", "--expiry-seconds", "3601"], /--expiry-seconds must be/], [["burst", ...w, "--n", "8", "--expiry-seconds", "1.5"], /--expiry-seconds must be/],
     ];
     for (const [argv, why] of bad) expect(() => parseArgs(argv)).toThrow(why);
   });

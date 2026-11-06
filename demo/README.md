@@ -29,6 +29,7 @@ bun lanes.ts burst --wallet 0x… --n 8 --json-out out/    # the sent JSON to fi
 | `--value-wei` | `0` | Each lane's value, in wei |
 | `--to` | the account's allowed target | Each lane's recipient |
 | `--mempool` | `alt` | `burst` only: `alt` (the sidecar) or `public` (the node's own pool) |
+| `--expiry-seconds` | `180` | Each lane's deadline, 10 to 3600 s. 8 lanes need 2 relay passes and each lane up to 4 pushes of 10 s, so the single send's 90 s left no margin on the devnet (spec "Fees", Nov 6) |
 | `--force` | | `burst` only: send even when the plan says the balance does not cover the lanes |
 | `--json-out DIR` | | `burst` only: write each lane's sent JSON to `DIR/lane-<i>-<hash>.json` instead of printing it |
 
@@ -57,6 +58,11 @@ once).
 The backend is the only signer: run bursts through it, never beside a script that holds the same journal. On the
 devnet, point the backend at the miner's sidecar (`WL_GATEWAY_URL=https://altmempool.forshtat.com/rpc`): since Nov 5
 the gateway admits but does not relay (spec, Day-0).
+
+Fees: every quote's priority fee is raised to `WL_MIN_TIP_WEI` (3 gwei by default on chain 1337), because the sidecar
+relays the highest tip first, 4 per 10 s pass, and its own quote sat below teams that fix 2 gwei (spec "Fees", Nov 6).
+Fire a burst when the last few blocks carry no public transaction: ethrex rebuilds its block on every public-pool
+insert, and a rebuild drops the frame transactions the sidecar handed it (README draft, devnet evidence).
 
 ## Tests
 
