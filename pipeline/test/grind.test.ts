@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { concat, toHex, type Address, type Hex } from "viem";
 import { buildFrameTx, keyedNonce } from "../src/builder.ts";
 import { computeSigHash } from "../src/codec/codec.ts";
-import { grind, maxStepsFor } from "../src/grind.ts";
+import { grind, maxStepsFor, usableVerifyGas } from "../src/grind.ts";
+import { GRIND } from "../src/config.ts";
 import { placeholders, signFrameTx, type HashSigner, type SignatureSlot } from "../src/signer.ts";
 import { wotsVerifySteps } from "../src/wots.ts";
 
@@ -39,6 +40,28 @@ describe("grinding", () => {
     const { sigHash } = await signFrameTx(g.tx, slots);
     expect(signCalls).toBe(1);
     expect(sigHash).toBe(g.sigHash);
+  });
+
+  test("behind the proxy, 1/64 of the gas left at the DELEGATECALL is held back (EIP-150)", () => {
+    expect(usableVerifyGas(90_000n)).toBe(90_000);
+    expect(usableVerifyGas(90_000n, 3_124)).toBe(88_643);
+    expect(usableVerifyGas(94_900n, 3_124)).toBe(93_466);
+    expect(maxStepsFor({ verifyGasLimit: 90_000n, baseGas: 54_930, gasPerStep: 66.1 })).toBe(530);
+    expect(maxStepsFor({ verifyGasLimit: 90_000n, baseGas: 54_930, gasPerStep: 66.1, proxyPreCall: 3_124 })).toBe(510);
+  });
+
+  test("GRIND accepts exactly the measured messages that fit through the proxy", () => {
+    // simulate-verify-gas.ts on account 2, Nov 6: [chain steps, verify-frame gas used], each from one real signature.
+    const measured = [[420, 82_390], [450, 84_525], [480, 86_280], [495, 87_094], [510, 88_429], [525, 89_356], [555, 91_344], [570, 92_326]];
+    for (const limit of [90_000n, 94_900n]) {
+      const maxSteps = maxStepsFor({ ...GRIND.cold, verifyGasLimit: limit });
+      for (const [steps, gas] of measured) {
+        const fits = gas! <= usableVerifyGas(limit, GRIND.cold.proxyPreCall);
+        expect({ limit, steps, accepted: steps! <= maxSteps }).toEqual({ limit, steps, accepted: fits });
+      }
+    }
+    expect(maxStepsFor({ ...GRIND.cold, verifyGasLimit: 90_000n })).toBe(510); // 525, the next reachable count, runs out of gas
+    expect(maxStepsFor({ ...GRIND.hot, verifyGasLimit: 90_000n })).toBe(409);
   });
 
   test("refuses a budget no message can fit, and gives up after maxTries", () => {

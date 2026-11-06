@@ -1,6 +1,9 @@
 // Measures the account's verify-frame gas against WOTS+ chain steps on the devnet, without any real signature:
 // each simulated transaction carries a random entry (right version and slot, random bytes), so the verify frame
-// does all the hashing and then reverts at the final root comparison, and a revert reports the gas used up to it.
+// does all the hashing and then reverts at the final root comparison. That only measures something on a node that
+// reports the gas a refused frame used. The devnet's node does not (Nov 6, ethrex 9aa3645d: frames and gasUsed are
+// null for a refused verify frame), so there the script stops at the first message; simulate-verify-gas.ts measures
+// with real signatures instead, one burned leaf per point.
 // The deadline is varied to pick messages across the step range. Nothing is signed, so no leaf is spent.
 // The success path costs this plus what APPROVE adds (the fresh key's 20,000 and the approval itself).
 // Written with Claude Code (AI) for Vicky.
@@ -37,7 +40,12 @@ for (const [, deadline] of picks) {
   const steps = wotsVerifySteps(computeSigHash(tx));
   const sim: any = await node.simulate(tx, false);
   const reason = sim.revertData && sim.revertData !== "0x" ? new TextDecoder().decode(hexToBytes(sim.revertData)).replace(/\0+$/, "") : sim.haltReason ?? sim.canonicalMempoolViolation;
-  const gas = Number(BigInt(sim.frames?.[1]?.gasUsed ?? "0x0"));
+  // A missing frame gas is not zero gas: without it there is nothing to measure, so stop instead of fitting zeros.
+  if (!sim.frames?.[1]?.gasUsed) {
+    throw new Error(`the node reports no gas for a refused verify frame (frames ${JSON.stringify(sim.frames)}, gasUsed ${sim.gasUsed}, ` +
+      `reason ${reason}): this script cannot measure on this node; use scripts/simulate-verify-gas.ts`);
+  }
+  const gas = Number(BigInt(sim.frames[1].gasUsed));
   if (reason !== "sig: hash-based check") { console.log(`  ${steps} steps: unexpected ${reason} (${gas} gas), skipped`); continue; }
   points.push({ steps, gas });
   console.log(`  ${String(steps).padStart(4)} steps: verify frame ${gas} gas up to the root comparison`);
@@ -48,4 +56,5 @@ const slope = points.reduce((s, p) => s + (p.steps - mx) * (p.gas - my), 0) / po
 const intercept = my - slope * mx;
 const maxResidual = Math.max(...points.map((p) => Math.abs(p.gas - (intercept + slope * p.steps))));
 console.log(`\nverify frame up to the comparison = ${intercept.toFixed(0)} + ${slope.toFixed(2)} x steps (largest residual ${maxResidual.toFixed(0)} gas)`);
-console.log(`one real success (leaf 2, 465 steps) used 92,558: APPROVE and the fresh key add ${(92_558 - (intercept + slope * 465)).toFixed(0)}`);
+console.log(`account 1's one real success (older verifier; leaf 2, 465 steps) used 92,558: APPROVE and the fresh key add ` +
+  `${(92_558 - (intercept + slope * 465)).toFixed(0)} if this fit is for that verifier`);
