@@ -4,3 +4,28 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tiny-keccak = { version = "2", features = ["keccak"] }
+clap = { version = "4", features = ["derive"], optional = true }
+hex = "0.4"
+serde_json = "1"
+
+[features]
+default = ["cli"]
+cli = ["dep:clap"]
+
+[[bin]]
+name = "signer"
+path = "src/bin/signer/main.rs"
+required-features = ["cli"]
+
+[dev-dependencies]
+# Quip's reference implementation, AGPL: used as a test oracle only, never linked into the binary.
+hashsigs-rs = "0.2.1"
+
+# Hashing dominates every test; keep it fast in debug builds.
+[profile.dev.package.tiny-keccak]
+opt-level = 3
+
+[[bench]]
+name = "ops"
+harness = false
