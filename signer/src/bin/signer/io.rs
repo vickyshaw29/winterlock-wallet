@@ -27,7 +27,8 @@ pub fn write_json(path: &Path, value: &Value, private: bool) -> Result<(), Fail>
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let mut file = std::fs::File::create(path)?;
+        let mut file = open_for_write(path, private)?;
+        // A file that already existed keeps its old mode through the open: narrow it before writing.
         #[cfg(unix)]
         if private {
             use std::os::unix::fs::PermissionsExt;
@@ -36,4 +37,39 @@ pub fn write_json(path: &Path, value: &Value, private: bool) -> Result<(), Fail>
         file.write_all((serde_json::to_string_pretty(value)? + "\n").as_bytes())
     };
     write().map_err(|e| fail("bad_args", format!("{}: {e}", path.display())))
+}
+
+/// A private file is created with mode 0600, so no other user can open it, not even
+/// between the create and a later chmod.
+fn open_for_write(path: &Path, private: bool) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    if private {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    #[cfg(not(unix))]
+    let _ = private;
+    options.open(path)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn private_file_is_created_0600() {
+        let path = std::env::temp_dir().join(format!("signer-born-private-{}", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let file = super::open_for_write(&path, true).unwrap();
+        let mode = file.metadata().unwrap().permissions().mode() & 0o777;
+        std::fs::remove_file(&path).unwrap();
+        // With the usual umask 022, a plain create would give 0644 here.
+        assert_eq!(
+            mode & 0o077,
+            0,
+            "mode {mode:o} at creation, before any chmod"
+        );
+    }
 }
