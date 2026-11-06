@@ -1,0 +1,32 @@
+{
+  "name": "winterlock-snap",
+  "version": "0.2.3",
+  "description": "Winterlock in MetaMask Flask: a post-quantum account on EIP-8141 frame transactions, one WOTS+ leaf per nonce key",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vickyshaw29/winterlock-wallet.git"
+  },
+  "private": true,
+  "license": "MIT",
+  "files": [
+    "dist/",
+    "snap.manifest.json"
+  ],
+  "scripts": {
+    "build": "mm-snap build",
+    "serve": "mm-snap build && mm-snap serve",
+    "site": "bun site/serve.ts",
+    "test": "../pipeline/node_modules/.bin/tsc -p . && WL_SNAP_FAKE_CHAIN=1 mm-snap build && jest; s=$?; mm-snap build && exit $s"
+  },
+  "dependencies": {
+    "@metamask/snaps-sdk": "12.1.0",
+    "@winterlock/pipeline": "link:../pipeline",
+    "@metamask/keyring-api": "24.3.0",
+    "@metamask/keyring-snap-sdk": "10.0.1"
+  },
+  "devDependencies": {
+    "@metamask/snaps-cli": "8.4.1",
+    "@metamask/snaps-jest": "10.2.2",
+    "jest": "29.7.0"
+  }
+}

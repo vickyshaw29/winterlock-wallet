@@ -835,6 +835,44 @@ await p.sendKeyed({ journal, band: { from: 1, to: 1008 }, sender: wallet, calls,
 - `pipeline/examples/snap/`: an example MetaMask Snap, not a wallet. It takes its seed from `snap_getEntropy`, salted with an account nonce created at install (a reinstall gets a new tree, never the old one's leaves), keeps one journal in `snap_manageState`, handles requests one at a time, answers only `http://127.0.0.1:15190`, signs, and sends against a stand-in chain. On a real chain a send's follow phase can outlast MetaMask's 60 s request limit, so a real Snap would answer once the transaction is submitted and settle it in a later request. `bun run build` in `pipeline/`, then `bun install && npm test` in the example typechecks it, builds it with MetaMask's Snaps CLI (which also evaluates the bundle in its sandbox) and runs it in MetaMask's Snap simulator (`@metamask/snaps-jest`).
 - Found while building it: a bare SES compartment throws on `Date.now()`. A Snap's `Date` works, so the SES test gives the compartment one, as MetaMask does. MetaMask's test stack (`@metamask/utils` 12, Oct 2026) ships ES-module-only packages that Jest 29 cannot require, so the example converts them with SWC (`test/esm-to-cjs.cjs`).
 
+## Sending from MetaMask (Flask)
+
+MetaMask cannot build a frame transaction, but MetaMask Flask can send an ERC-4337 user operation for an account an
+Account Snap holds, to the bundler URL the Snap names. So the Winterlock Snap (`snap/`) is also an Account Snap whose one
+account, type `eip155:erc4337`, is the Winterlock account, and a local bundler (`bundler/`) unwraps what MetaMask sends.
+Nothing on chain is ERC-4337: there is no EntryPoint and no bundle. The user operation is only the envelope.
+
+1. A page calls `eth_sendTransaction` from the Winterlock account, with the fee fields (MetaMask's 4337 path refuses a
+   send without them, and Flask cannot estimate fees on chain 1337).
+2. MetaMask asks the Snap to prepare: the Snap reserves a fresh leaf whose key is unused on chain and answers with
+   `nonce = nonceKey << 64` (an ERC-4337 nonce is a 192-bit key and a 64-bit sequence; ours is key and 0), the call
+   list as `callData`, gas limits that sum to an upper bound of the transaction's gas limit, and
+   `bundlerUrl = http://127.0.0.1:15192/rpc`.
+3. The user confirms in MetaMask's own screen. MetaMask asks the Snap to sign. The Snap signs only the user operation
+   it prepared, at the user's fees, once per leaf (a second request for the same leaf is refused), after the tip floor,
+   base fee and balance checks; it records the leaf "submitted" before the signature leaves the Snap. The signature
+   field carries the whole signed frame transaction.
+4. MetaMask posts the user operation to the bundler, which holds no key. `checkUserOpTx` (`pipeline/src/userop.ts`), run
+   by the Snap before signing and by the bundler before sending, ties every frame, fee and limit of the transaction to
+   the user operation: nothing that pays anyone else, more, or at another fee is ever sent. The bundler refuses a second
+   transaction on a nonce key it already carries, sends to the alt mempool, follows the key on chain, and reports
+   `success: false` only for Expired or Reverted, never for an included transaction.
+
+Live on the devnet, Nov 6: two sends from MetaMask landed (blocks 5,703 and 5,808, about 25 s after confirming), each
+settled in the Snap's journal.
+
+```sh
+(cd pipeline && bun install && bun run build)
+(cd bundler && bun install && bun src/main.ts)          # http://127.0.0.1:15192/rpc
+(cd snap && bun install && npm run serve)               # local:http://localhost:15191, MetaMask Flask only
+(cd snap && bun site/serve.ts)                          # http://localhost:15190: create, fund, Add to MetaMask, Send from MetaMask
+```
+
+Found while running it live: MetaMask's sign request carries the user operation alone, not the entry point the keyring
+API's docs list; and work a Snap leaves running after it answers did not progress in real MetaMask, so the Snap finds
+each lane's end at the page's next request instead. Tests: `pipeline/test/userop.test.ts`, `bundler/test/`, and the
+MetaMask cases in `snap/test/snap.test.js` (MetaMask's Snap simulator, `npm test` in `snap/`).
+
 ## Authorship and AI use
 
 Noncebound is a solo hackathon project, built during the event by Vicky Prasad
@@ -878,9 +916,12 @@ that it was made with Claude, so `git log` shows where AI was used. Per file:
 - The parallel-lanes fix (Nov 6, approved by Vicky, spec "Fees"): the tip floor `MIN_TIP_WEI` in `pipeline/src/config.ts` and `withTipFloor` in `pipeline/src/rpc.ts` (with `gateway.gasPrice` applying it), the `--expiry-seconds` flag and the 180 s burst deadline in `demo/lanes.ts`; their tests in `pipeline/test/rpc.test.ts` and `demo/test/lanes.test.ts`
 - The Ledger restyle of the screens, started on Nov 6 and stopped part-way (Claude Code workflow): `web/public/register.js` (the key register's leaf states) and the per-screen styles `web/public/hot-cold.css`, `agent.css`, `session.css` and `index.css`; changes across `web/public/` (tokens and `@font-face` in `style.css`, the ledger board, ticket strip, tear and cancellation stamp in `board.js`, `lanes.js`, `ui.js`, `hot-cold.js`, `agent.js`, `session.js`, `index.js`, the pages' HTML) and in `web/serve.ts` (font MIME type, CSP); the tests `web/test/register.test.ts`, `ledger-hot-cold.test.ts`, `ledger-agent.test.ts` and `ledger-session.test.ts`, with changes to the other web tests; in the backend, the wallet view's `leaves` field (`leafStates` in `backend/src/backend.ts`) with tests in `backend/test/tickets.test.ts` and `backend/test/wallets.test.ts`
 - The core fixes after the Nov 6 end-to-end run: the grinding handed over at submission and on refusals (`GrindInfo` in `pipeline/src/submit.ts`); `grind` and the four gas columns `gas` on `GET /tx/:hash` and the lane board, and `GET /wallets` leaving out wallets that cannot sign on this chain (`grindView`, `gasView` and `pinnedElsewhere` in `backend/src/backend.ts`, `TxGrind` in `backend/src/store.ts`, `backend/README.md`); their tests in `pipeline/test/submit.test.ts`, `backend/test/send.test.ts` and `backend/test/wallets.test.ts`
+- The MetaMask Flask Snap (Nov 6): `snap/src/index.tsx`, `src/fake-chain.ts`, `test/snap.test.js`, `test/esm-to-cjs.cjs`, `snap.manifest.json`, `snap.config.ts`, `package.json`, `tsconfig.json`, `jest.config.js`, `.gitignore`, and the page's first version (`site/index.html`, `site/app.js`, `site/style.css`, `site/serve.ts`)
+- The Snap page's interface refinement (Nov 6), written with Codex (OpenAI) at Vicky's request: `snap/site/index.html`, `style.css`, the presentation additions in `app.js`, and the static-asset allowlist and local-font CSP in `serve.ts`; shared design assets copied from the main workspace as `theme.css`, `workspace.css`, `shell.js` and `activity.js`. The design is not final
+- Sending from MetaMask itself through an ERC-4337 envelope (Nov 6, approved by Vicky; Claude Code researched MetaMask's source and ran a throwaway spike outside this repository first): `pipeline/src/userop.ts` (the envelope and `checkUserOpTx`), `signPrepared` in `pipeline/src/submit.ts`, the export in `pipeline/src/core.ts`, and `pipeline/test/userop.test.ts`; every file in `bundler/` (`src/bundler.ts`, `src/main.ts`, `test/bundler.test.ts`, `package.json`, `bun.lock`, `tsconfig.json`, `.gitignore`); in `snap/`, the Account Snap keyring in `src/index.tsx`, the `endowment:keyring` and `snap_manageAccounts` permissions, the MetaMask tests in `test/snap.test.js`, and step 4 of the page (`site/index.html`, `site/app.js`, `site/serve.ts`'s CSP)
 - This README (Nov 6): written with Claude Code from the measured runs, the code and Vicky's notes, and edited by Vicky. The Day-0 probe scripts, kept outside this repository, were also written with Claude Code
 
-Not written by us: `pipeline/src/codec/codec.ts` and `pipeline/src/codec/FrameTx.ts` are copied from [mempool-workshop-sidecar](https://github.com/forshtat/mempool-workshop-sidecar) at commit `2e22ff0a`, MIT, Copyright (c) 2023 Etherspot; Claude Code added only the header comments and changed one import path. `fakechain/src/sidecarRules.ts` ports the sidecar's admission rules (classifyFrame, recognizeValidationPrefix, validateStructuralRules, validateSignature, describeStructuredFailure) from the same commit, MIT, Copyright (c) 2023 Etherspot, so the fake refuses with the sidecar's own words. The fonts in `web/public/fonts/`, Archivo (`archivo-latin.woff2`) and Besley (`besley-latin.woff2`), are from Google Fonts under the SIL Open Font License 1.1, Copyright 2020 The Archivo Project Authors and The Besley Project Authors; their licences are beside them (`OFL-Archivo.txt`, `OFL-Besley.txt`).
+Not written by us: `pipeline/src/codec/codec.ts` and `pipeline/src/codec/FrameTx.ts` are copied from [mempool-workshop-sidecar](https://github.com/forshtat/mempool-workshop-sidecar) at commit `2e22ff0a`, MIT, Copyright (c) 2023 Etherspot; Claude Code added only the header comments and changed one import path. `fakechain/src/sidecarRules.ts` ports the sidecar's admission rules (classifyFrame, recognizeValidationPrefix, validateStructuralRules, validateSignature, describeStructuredFailure) from the same commit, MIT, Copyright (c) 2023 Etherspot, so the fake refuses with the sidecar's own words. The fonts in `web/public/fonts/`, Archivo (`archivo-latin.woff2`) and Besley (`besley-latin.woff2`), are from Google Fonts under the SIL Open Font License 1.1, Copyright 2020 The Archivo Project Authors and The Besley Project Authors; their licences are beside them (`OFL-Archivo.txt`, `OFL-Besley.txt`). `snap/site/fonts/` holds copies of the same two fonts and licence files.
 
 ## Licence
 

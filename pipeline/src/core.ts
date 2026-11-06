@@ -19,6 +19,7 @@ export * from "./account.ts";
 export * from "./chain-pin.ts";
 export * from "./estimate.ts";
 export * from "./lanes.ts";
+export * from "./userop.ts";
 export {
   ENTRY_VERSION, HashSigError, Keyring, MAX_HEIGHT, decodeEntry, encodeEntry, entryLength, keyringSigner, verifyEntry,
   type KeyringParams, type LeafCache,
