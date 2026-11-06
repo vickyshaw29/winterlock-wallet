@@ -68,8 +68,8 @@ and lane plans every 30. A plan also refreshes when its inputs or ticket counts 
 
 ## Interface
 
-Production styles live in `src/styles/`; semantic Tailwind tokens map to the same light/dark palette. Manrope and IBM
-Plex Mono are self-hosted, with upstream SIL OFL licences in `src/styles/fonts/`. Runtime resources stay on the local
+Production styles live in `src/styles/`; semantic Tailwind tokens map to the same light/dark palette (see `DESIGN.md`).
+IBM Plex Sans and IBM Plex Mono are self-hosted from `@fontsource`, and the build copies their SIL OFL licences. Runtime resources stay on the local
 origin. Appearance persists and respects the system setting, with `?theme=light` and `?theme=dark` for review.
 Reduced motion follows the system preference. All critical controls have visible keyboard focus and labelled inputs.
 Base UI dialogs provide focus containment, Escape dismissal and focus return.

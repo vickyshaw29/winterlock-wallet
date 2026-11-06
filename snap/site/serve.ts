@@ -22,14 +22,16 @@ const FILES: Record<string, { file: string; type: string }> = {
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
-  "/workspace.css": { file: "workspace.css", type: "text/css; charset=utf-8" },
   "/theme.css": { file: "theme.css", type: "text/css; charset=utf-8" },
   "/shell.js": { file: "shell.js", type: "text/javascript; charset=utf-8" },
   "/activity.js": { file: "activity.js", type: "text/javascript; charset=utf-8" },
-  "/fonts/archivo-latin.woff2": { file: "fonts/archivo-latin.woff2", type: "font/woff2" },
-  "/fonts/besley-latin.woff2": { file: "fonts/besley-latin.woff2", type: "font/woff2" },
-  "/fonts/OFL-Archivo.txt": { file: "fonts/OFL-Archivo.txt", type: "text/plain; charset=utf-8" },
-  "/fonts/OFL-Besley.txt": { file: "fonts/OFL-Besley.txt", type: "text/plain; charset=utf-8" },
+  "/fonts/ibm-plex-sans-latin-400-normal.woff2": { file: "fonts/ibm-plex-sans-latin-400-normal.woff2", type: "font/woff2" },
+  "/fonts/ibm-plex-sans-latin-500-normal.woff2": { file: "fonts/ibm-plex-sans-latin-500-normal.woff2", type: "font/woff2" },
+  "/fonts/ibm-plex-sans-latin-600-normal.woff2": { file: "fonts/ibm-plex-sans-latin-600-normal.woff2", type: "font/woff2" },
+  "/fonts/ibm-plex-mono-latin-400-normal.woff2": { file: "fonts/ibm-plex-mono-latin-400-normal.woff2", type: "font/woff2" },
+  "/fonts/ibm-plex-mono-latin-500-normal.woff2": { file: "fonts/ibm-plex-mono-latin-500-normal.woff2", type: "font/woff2" },
+  "/fonts/OFL-IBM-Plex-Sans.txt": { file: "fonts/OFL-IBM-Plex-Sans.txt", type: "text/plain; charset=utf-8" },
+  "/fonts/OFL-IBM-Plex-Mono.txt": { file: "fonts/OFL-IBM-Plex-Mono.txt", type: "text/plain; charset=utf-8" },
 };
 
 const HEADERS = {

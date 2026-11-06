@@ -497,6 +497,7 @@ function render() {
   setText("bundler", state.bundler?.text ?? "Bundler: –");
   renderSetup(connected, busy);
   renderLanes();
+  drawKeySheet({ grid: $("key-sheet"), legend: $("key-legend"), total: $("keys-total") }, state.leaves, h, { unused: "unused", ...STATUS_WORDS });
 }
 
 // Presentation follows the existing connection/account state. It performs no wallet or network request.
@@ -585,6 +586,46 @@ function renderLanes() {
     const tx = href ? link(href, short(l.txHash ?? href, 10, 6)) : "–";
     tr.append(cell(String(l.leaf)), cell(String(l.nonceKey ?? "–")), status, cell(tx));
     return tr;
+  }));
+}
+
+// The key sheet: one square per leaf of the Snap's tree, filled by the state winterlock_status reports for it.
+const KEY_STATES = ["reserved", "submitted", "onchain", "burned"];
+
+/**
+ * @param {{ grid: HTMLElement, legend: HTMLElement, total: HTMLElement }} el
+ * @param {{ leaf: number, status: string }[]} leaves
+ * @param {number} height the tree's height; 10 (1,024 leaves) until the Snap has said
+ * @param {Record<string, string>} words the page's word for each status
+ */
+function drawKeySheet(el, leaves, height, words) {
+  const n = 2 ** (Number.isInteger(height) && height > 0 && height <= 10 ? height : 10);
+  const at = new Map(leaves.map((l) => [l.leaf, KEY_STATES.includes(l.status) ? l.status : "unused"]));
+  const signature = JSON.stringify([n, [...at]]);
+  if (el.grid.dataset.drawn === signature) return;
+  el.grid.dataset.drawn = signature;
+  if (el.grid.childElementCount !== n) el.grid.replaceChildren(...Array.from({ length: n }, () => document.createElement("i")));
+
+  const counts = Object.fromEntries(["unused", ...KEY_STATES].map((s) => [s, 0]));
+  for (const [i, cell] of [...el.grid.children].entries()) {
+    const s = at.get(i) ?? "unused";
+    counts[s] += 1;
+    cell.className = s === "unused" ? "" : `k-${s}`;
+    cell.title = `Leaf ${i}: ${words[s] ?? s}`;
+  }
+  const used = n - counts.unused;
+  el.total.textContent = n.toLocaleString("en-US");
+  el.grid.setAttribute("aria-label", used ? `${used} of ${n.toLocaleString("en-US")} one-time keys used` : "No one-time keys used yet");
+  el.legend.replaceChildren(...[["unused"], ["reserved", "submitted"], ["onchain"], ["burned"]].map((group) => {
+    const li = document.createElement("li");
+    const swatch = document.createElement("i");
+    swatch.className = group[0] === "unused" ? "" : `k-${group[0]}`;
+    const word = group.map((s) => words[s] ?? s).join(" or ");
+    const count = document.createElement("span");
+    count.className = "mono";
+    count.textContent = group.reduce((sum, s) => sum + counts[s], 0).toLocaleString("en-US");
+    li.append(swatch, `${word[0].toUpperCase()}${word.slice(1)}`, count);
+    return li;
   }));
 }
 

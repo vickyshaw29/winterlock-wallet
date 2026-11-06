@@ -11,6 +11,11 @@ import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WalletProvider, useWallet } from "./lib/state";
 import { Shell, WalletGate } from "./components/common";
+import "@fontsource/ibm-plex-sans/latin-400.css";
+import "@fontsource/ibm-plex-sans/latin-500.css";
+import "@fontsource/ibm-plex-sans/latin-600.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./styles.css";
 
 const queries = new QueryClient({

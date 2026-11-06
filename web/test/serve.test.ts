@@ -232,8 +232,8 @@ describe("static files", () => {
   test("the self-hosted fonts as font/woff2; the CSP takes fonts and styles from this origin only, no third-party host", async () => {
     const { req } = harness();
     for (const p of [
-      "/assets/manrope-latin.woff2",
-      "/assets/ibm-plex-mono-latin.woff2",
+      "/assets/ibm-plex-sans-latin-400-normal.woff2",
+      "/assets/ibm-plex-mono-latin-400-normal.woff2",
     ]) {
       const res = await req(p);
       const bytes = new Uint8Array(await res.arrayBuffer());

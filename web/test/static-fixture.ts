@@ -19,9 +19,12 @@ export function createStaticFixture(): {
   fs.writeFileSync(path.join(assets, "app.js"), "export {};\n");
   fs.writeFileSync(path.join(assets, "app.css"), "body { margin: 0; }\n");
   // Actual production font bytes make the MIME/content checks useful without invoking Vite.
-  for (const font of ["manrope-latin.woff2", "ibm-plex-mono-latin.woff2"]) {
+  for (const [family, font] of [
+    ["ibm-plex-sans", "ibm-plex-sans-latin-400-normal.woff2"],
+    ["ibm-plex-mono", "ibm-plex-mono-latin-400-normal.woff2"],
+  ] as const) {
     fs.copyFileSync(
-      path.join(import.meta.dir, "../src/styles/fonts", font),
+      path.join(import.meta.dir, "../node_modules/@fontsource", family, "files", font),
       path.join(assets, font),
     );
   }
