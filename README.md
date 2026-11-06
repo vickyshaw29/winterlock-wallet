@@ -173,18 +173,20 @@ while alt lanes are pending ([why](docs/devnet-evidence.md#parallel-lanes-and-th
 `agent.html` and `session.html`, each have a Play scene button that runs their story, and a Mempool switch between alt
 and public. Seeds, journals and keys live in `~/.winterlock`, never in the repository.
 
-**4. Retained MetaMask integration services.** The React workspace on `http://127.0.0.1:5173/` is the sole
-product frontend. The old separate Snap demo page and its server have been removed. The Snap signer, keyring and
-bundler remain in `snap/` and `bundler/`; their exact permitted UI origins are `localhost:5173` and `127.0.0.1:5173`.
-The current React controls use backend signing. A Snap connection/signing flow is not exposed in this UI.
-
-For extension development only:
+**4. From MetaMask Flask.** The React workspace on `http://127.0.0.1:5173/` signs through the backend. The Snap has
+its own page, `snap/site/`, on `http://localhost:15190`; the Snap answers both origins. Needs MetaMask Flask in Chrome
+(a separate profile, or regular MetaMask disabled) with a throwaway recovery phrase, and no other network on chain 1337.
 
 ```sh
-(cd pipeline && bun install && bun run build)
-(cd bundler && bun install && bun src/main.ts)          # bundler RPC on 15192
-(cd snap && bun install && npm run serve)               # extension bundle service on 15191
+(cd pipeline && bun install) && (cd bundler && bun install)
+cd snap && bun install && bun run dev    # pipeline core, bundler on 15192, the Snap on 15191, its page on 15190
 ```
+
+On `http://localhost:15190`, in order: Connect Flask (installs `local:http://localhost:15191`), Add devnet to Flask,
+Get 1 test ETH, Create account using Flask (confirm the factory call in Flask), Fund from Flask, then Send with
+Winterlock Snap, or Add to MetaMask and Send from MetaMask. The first connect builds the key tree in the Snap (up to
+30 s); the Snap keeps its leaf nodes, so later starts reuse them. Removing the Snap loses the account's keys: send its
+balance away first.
 
 ## How it works
 

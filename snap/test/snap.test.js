@@ -126,8 +126,9 @@ describe("the Winterlock Snap", () => {
       const origins = permissions[permission];
       expect(isOriginAllowed(origins, "website", "http://localhost:5173")).toBe(true);
       expect(isOriginAllowed(origins, "website", "http://127.0.0.1:5173")).toBe(true);
-      expect(isOriginAllowed(origins, "website", "http://localhost:15190")).toBe(false);
-      expect(isOriginAllowed(origins, "website", "http://127.0.0.1:15190")).toBe(false);
+      expect(isOriginAllowed(origins, "website", "http://localhost:15190")).toBe(true); // the Snap's page, site/
+      expect(isOriginAllowed(origins, "website", "http://127.0.0.1:15190")).toBe(true);
+      expect(isOriginAllowed(origins, "website", "http://localhost:15191")).toBe(false);
       expect(isOriginAllowed(origins, "website", "https://example.com")).toBe(false);
       expect(isOriginAllowed(origins, "snap", "npm:some-other-snap")).toBe(false);
     }
@@ -174,10 +175,16 @@ describe("the Winterlock Snap as a MetaMask account (ERC-4337 envelope, Nov 6)",
     const asPage = { id: reqId(), scope: "eip155:1337", account: s.account.id, origin: ORIGIN, request: { method: "eth_prepareUserOperation", params: [{ to: TO, value: "0x3e8", data: "0x" }] } };
     await expect(keyringCall(s, ORIGIN, "keyring_submitRequest", asPage)).rejects.toThrow(/may not call keyring_submitRequest/);
     await expect(keyringCall(s, "https://example.com", "keyring_listAccounts")).rejects.toThrow(/may not call/);
-    for (const oldOrigin of ["http://localhost:15190", "http://127.0.0.1:15190"]) {
-      await expect(keyringCall(s, oldOrigin, "keyring_listAccounts")).rejects.toThrow(/may not call/);
-    }
+    expect(await keyringCall(s, "http://localhost:15190", "keyring_listAccounts")).toEqual([s.account]);
     await expect(keyringCall(s, "metamask", "keyring_createAccount", { options: {} })).rejects.toThrow(/may not call/);
+  });
+
+  it("the page may also add the account through winterlock_addToMetaMask, once", async () => {
+    const s = await withAccount();
+    const account = await call(s.request, "winterlock_addToMetaMask");
+    expect(account).toMatchObject({ type: "eip155:erc4337", address: s.used.account, scopes: ["eip155:1337"] });
+    await expect(call(s.request, "winterlock_addToMetaMask")).rejects.toThrow(/already in MetaMask/);
+    expect(await keyringCall(s, "metamask", "keyring_listAccounts")).toEqual([account]);
   });
 
   it("prepare reserves a fresh leaf and names the bundler; sign signs it once, at the user's fees", async () => {

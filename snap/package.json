@@ -13,6 +13,8 @@
     "snap.manifest.json"
   ],
   "scripts": {
+    "dev": "bun dev.ts",
+    "site": "bun site/serve.ts",
     "build": "mm-snap build",
     "serve": "mm-snap build && mm-snap serve",
     "test": "../pipeline/node_modules/.bin/tsc -p . && WL_SNAP_FAKE_CHAIN=1 mm-snap build && jest; s=$?; mm-snap build && exit $s"
