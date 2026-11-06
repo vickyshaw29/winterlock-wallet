@@ -74,7 +74,8 @@ origin. Appearance persists and respects the system setting, with `?theme=light`
 Reduced motion follows the system preference. All critical controls have visible keyboard focus and labelled inputs.
 Base UI dialogs provide focus containment, Escape dismissal and focus return.
 
-Payment and cold panels retain natural heights. History uses a consistent **320 px** scroll area, sticky headers and
+Send from cold opens by default so the recipient and amount fields are immediately discoverable; the other cold-device
+actions start collapsed. Payment and cold panels retain natural heights. History uses a consistent **320 px** scroll area, sticky headers and
 a pinned lane column on narrow screens. Below 1000 px, task tabs expose Pay / Cold device / Activity, Run agent /
 Allowance / Activity, and Session / Dapp / Activity. They preserve inputs and live state, support arrow keys and
 Home/End, and participate in browser Back/Forward navigation. Session grants open the Dapp view on mobile.

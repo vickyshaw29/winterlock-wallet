@@ -457,7 +457,7 @@ function ColdForms({ offline }: { offline: boolean }) {
         </dl>
       </div>
       <div className="forms">
-        <details className="fold" name="cold-actions" id="fold-transfer">
+        <details className="fold" name="cold-actions" id="fold-transfer" open>
           <summary>
             <h3>
               Send from cold
@@ -566,7 +566,7 @@ function ColdForms({ offline }: { offline: boolean }) {
             </div>
           </form>
         </details>
-        <details className="fold" name="cold-actions" id="fold-cut" open>
+        <details className="fold" name="cold-actions" id="fold-cut">
           <summary>
             <h3>
               Tickets for the phone
