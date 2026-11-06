@@ -1,0 +1,78 @@
+/* Agent screen's own styles: the market (price, sparkline, the rule), the allowance and the event log.
+   Shared tokens and parts are in style.css; this file only adds what this screen draws.
+   Written with Claude Code (AI) for Vicky.
+   Ledger direction (1-ledger.md, section 7): tokens only, no new colour. */
+
+/* ------------------------------------------------------------------ three columns of one sheet
+   Market, allowance, the day book, with column rules between them and no perforation: nothing on this screen is cut
+   from them (the perforation runs only round the agent's stub strip). Two columns under 1180 px, the day book across
+   the foot; one column under 760 px, each part ruled off from the one above. */
+.agent-panes { grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) minmax(0, 4fr); gap: 32px; }
+.agent-panes > .pane + .pane { border-left: 1px solid var(--rule); padding-left: 32px; }
+@media (max-width: 1180px) {
+  .agent-panes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .agent-panes > .pane.daybook { grid-column: 1 / -1; border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: 24px; }
+}
+@media (max-width: 760px) {
+  .agent-panes { grid-template-columns: minmax(0, 1fr); }
+  .agent-panes > .pane + .pane { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: 24px; }
+}
+
+/* ------------------------------------------------------------------ the market */
+
+.market { gap: 16px; }
+.price-line { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; }
+.price { font: 600 36px/40px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.change { font: 600 18px/24px var(--sans); font-variant-numeric: tabular-nums; }
+
+/* the sparkline: an Ink line on a Stock strip; the last 30 s under a hatched Print band (an SVG pattern, not a gradient) */
+.sparkline { display: block; width: 100%; height: 72px; background: var(--stock); border-radius: 4px; box-shadow: 0 0 0 1px var(--rule); cursor: crosshair; }
+.sparkline .spark-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sparkline .spark-hatch-line { stroke: var(--print); stroke-width: 1.5; opacity: .4; }
+.sparkline .spark-edge { stroke: var(--print); stroke-width: 1; }
+.sparkline .spark-label { font: 500 12px var(--sans); font-stretch: 85%; fill: var(--print); }
+.sparkline .spark-last, .sparkline .spark-hover { fill: var(--ink); stroke: var(--stock); stroke-width: 2; }
+.sparkline .spark-cross { stroke: var(--ink); stroke-width: 1; }
+
+/* the agent's rule, printed in a 1 px Ink box like an instruction on a form */
+.rule-box { display: grid; gap: 2px; padding: 12px 16px 14px; border: 1px solid var(--ink); border-radius: 2px; }
+.rule-label { font: 500 14px/20px var(--sans); color: var(--print); }
+.rule-text { font: 500 18px/24px var(--sans); }
+
+/* ------------------------------------------------------------------ the allowance */
+
+/* the agent's tickets: the stub strip, with the perforation they were cut along running round it */
+#stubs { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); margin: 6px; outline: 2px dotted var(--rule-strong); outline-offset: 4px; }
+/* Fire's moment: the next stubs, perforated as one block, lift together (agent.js liftStubs) */
+.stubs.lift { outline: 1.5px dashed var(--ink); outline-offset: 3px; }
+
+/* Max loss as a ledger total: a single Ink rule above the figure, drawn again when Server compromised burns tickets */
+.total { display: grid; gap: 2px; }
+.total-line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.total-label { font: 600 16px/24px var(--sans); color: var(--print); }
+.total-fig { position: relative; display: inline-block; padding-top: 6px; font: 600 24px/32px var(--sans); font-variant-numeric: tabular-nums; }
+.total-fig::before { content: ""; position: absolute; left: 0; right: 0; top: 0; border-top: 1px solid var(--ink); transform-origin: right center; }
+.total.m-rule .total-fig::before { animation: total-rule var(--rule-draw) both; }
+@keyframes total-rule { from { transform: scaleX(0); } }
+
+/* Expires in: proposed (Level B), so its buttons sit disabled at 40 % (style.css) with the proposed line under them */
+.expiry { gap: 8px; }
+.expires { font: 500 16px/24px var(--sans); }
+
+/* ------------------------------------------------------------------ the event log as a day book: no motion */
+
+.log {
+  list-style: none; margin: 0; padding: 0; border-top: 3px double var(--rule-strong);
+  max-height: 480px; overflow-y: auto; font: 400 14px/20px var(--sans);
+}
+.log li { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); overflow-wrap: anywhere; }
+.log .when { color: var(--print); font-variant-numeric: tabular-nums; }
+.log strong { font-weight: 600; }
+.log .sn { font: 700 14px/20px var(--serif); font-variant-numeric: lining-nums tabular-nums; } /* the shorthand resets it */
+@media (max-width: 760px) { .log { max-height: 360px; } }
+/* At three columns the day book runs exactly as long as the other two and scrolls inside that: size containment
+   keeps its entries out of the row's height, the pane stretches to the row, and the log takes what is left. */
+@media (min-width: 1181px) {
+  .agent-panes > .daybook { contain: size; grid-template-rows: auto minmax(0, max-content) auto; }
+  .daybook .log { max-height: none; }
+}

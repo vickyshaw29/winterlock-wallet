@@ -1,0 +1,24 @@
+/* Start page's own styles (Ledger direction): the wallets this backend holds, one account line each, ruled like the
+   ledger, and the create form. Shared tokens and parts are in style.css; this file only adds what this page draws.
+   Written with Claude Code (AI) for Vicky. */
+
+.panes.start { grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 40px 64px; padding-top: 16px; }
+
+/* the wallets: a double rule under the heading, a hairline under each line */
+.wallets { list-style: none; margin: 0; padding: 0; border-top: 3px double var(--rule-strong); }
+.wallets > li { display: grid; gap: 12px; padding: 16px 0 20px; border-bottom: 1px solid var(--rule); }
+.wallets > li.muted, .wallets > li.error { padding: 24px 0; }
+.wallets .summary { gap: 8px 40px; }
+.wallets .summary .kv:first-child { flex: 1 1 100%; } /* the address on a line of its own, in full */
+.wallets .summary .kv:first-child dd { font-size: 16px; font-weight: 500; }
+.wallets .links { display: flex; flex-wrap: wrap; gap: 4px 24px; font-weight: 500; }
+
+/* the create form: the key tree, then the hot policy, as on the cold device */
+.create { display: grid; gap: 20px; }
+.create .row { align-items: flex-start; }
+.create .row.submit { align-items: center; }
+.create sup { font-size: 10px; line-height: 0; }
+
+@media (max-width: 760px) {
+  .wallets .summary .kv:first-child dd { font-stretch: 85%; } /* condensed, so a full address fits a phone's line */
+}

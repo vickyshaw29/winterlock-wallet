@@ -1,0 +1,109 @@
+{
+  "source": "skandha_explorer_getTransaction on the workshop gateway, 2026-11-05; onChainSigHash = TXPARAM(0x08) logged by the probe account in a SENDER frame",
+  "cases": [
+    {
+      "hash": "0x65b9cd4d3ba7efcd1f6678664556a3e4a6330a71a7791893892f11c884c8edea",
+      "onChainSigHash": "0x3f858f2ce1b0a6f48d44ded00948e55f3666b833a95e7c99667302348ec0e5f6",
+      "note": "probe account, direct, key 0x100000005 seq 0, block 404445",
+      "tx": {
+        "chainId": "0x539",
+        "nonceKeys": [
+          "0x100000005"
+        ],
+        "nonceSeq": "0x0",
+        "sender": "0xD5A2ce68F6A5059D04e763F30D31c0f4F7fd7aAa",
+        "frames": [
+          {
+            "mode": 1,
+            "flags": 3,
+            "target": null,
+            "limits": {
+              "execution": "0xc350",
+              "state": "0x0"
+            },
+            "value": "0x0",
+            "data": "0x"
+          },
+          {
+            "mode": 2,
+            "flags": 0,
+            "target": "0xD5A2ce68F6A5059D04e763F30D31c0f4F7fd7aAa",
+            "limits": {
+              "execution": "0x186a0",
+              "state": "0x0"
+            },
+            "value": "0x0",
+            "data": "0x"
+          }
+        ],
+        "signatures": [
+          {
+            "scheme": 0,
+            "signer": "0x",
+            "msg": "0x",
+            "signature": "0x010203"
+          }
+        ],
+        "fees": {
+          "maxPriorityFeePerGas": "0x773593f9",
+          "maxFeePerGas": "0x77359401",
+          "maxFeePerBlobGas": "0x0"
+        },
+        "blobVersionedHashes": [],
+        "recentRootReferences": []
+      }
+    },
+    {
+      "hash": "0x501c111906358106ed44d6c4f67ad8a5da53749c75a33f61cda0ae70ea1d18c3",
+      "onChainSigHash": "0x07ba50522202ad9bae7ece235547691c0fe44ff6d06cd85e15c0699977976f82",
+      "note": "EIP-1167 proxy, key 0x100000008 seq 0, block 404508",
+      "tx": {
+        "chainId": "0x539",
+        "nonceKeys": [
+          "0x100000008"
+        ],
+        "nonceSeq": "0x0",
+        "sender": "0x13075A0F56D6a793eba4493d866e6502052abe87",
+        "frames": [
+          {
+            "mode": 1,
+            "flags": 3,
+            "target": null,
+            "limits": {
+              "execution": "0xc350",
+              "state": "0x0"
+            },
+            "value": "0x0",
+            "data": "0x"
+          },
+          {
+            "mode": 2,
+            "flags": 0,
+            "target": "0x13075A0F56D6a793eba4493d866e6502052abe87",
+            "limits": {
+              "execution": "0x186a0",
+              "state": "0x0"
+            },
+            "value": "0x0",
+            "data": "0x"
+          }
+        ],
+        "signatures": [
+          {
+            "scheme": 0,
+            "signer": "0x",
+            "msg": "0x",
+            "signature": "0x010203"
+          }
+        ],
+        "fees": {
+          "maxPriorityFeePerGas": "0x773593f9",
+          "maxFeePerGas": "0x77359401",
+          "maxFeePerBlobGas": "0x0"
+        },
+        "blobVersionedHashes": [],
+        "recentRootReferences": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,177 @@
+{
+ "source": "included: skandha_explorer_getTransaction on the miner sidecar, 2026-11-06 (hot ticket, block 406,078); rejected: shaped like docs/sidecar_explorer.md, with the real 120k-prefix rejection message from Day-0",
+ "included": {
+  "txHash": "0x311cdbb67f020d7ab7c90375cd99ae7fc7ce3edacb881505853681378260465f",
+  "admission": {
+   "id": 1107,
+   "txHash": "0x311cdbb67f020d7ab7c90375cd99ae7fc7ce3edacb881505853681378260465f",
+   "sender": "0x107445c26594fdb3eb62803a8e79b9d7732148c3",
+   "nonce": "0x0",
+   "nonceKeys": [
+    "0x3f1"
+   ],
+   "at": 1793906391231,
+   "source": "rpc",
+   "outcome": "included",
+   "checks": [
+    {
+     "rule": "gas-limit",
+     "verdict": "pass"
+    },
+    {
+     "rule": "recent-root",
+     "verdict": "pass"
+    },
+    {
+     "rule": "prefix",
+     "verdict": "pass"
+    },
+    {
+     "rule": "structure",
+     "verdict": "pass"
+    },
+    {
+     "rule": "signature",
+     "verdict": "pass"
+    },
+    {
+     "rule": "simulation",
+     "verdict": "pass"
+    },
+    {
+     "rule": "trace-alignment",
+     "verdict": "pass"
+    },
+    {
+     "rule": "OP-061",
+     "verdict": "pass"
+    },
+    {
+     "rule": "execution",
+     "verdict": "pass"
+    },
+    {
+     "rule": "trace-alignment",
+     "frameIndex": 1,
+     "entity": "payer",
+     "verdict": "pass"
+    },
+    {
+     "rule": "out-of-gas",
+     "frameIndex": 1,
+     "entity": "payer",
+     "verdict": "pass"
+    },
+    {
+     "rule": "OP-011",
+     "frameIndex": 1,
+     "entity": "payer",
+     "verdict": "pass"
+    },
+    {
+     "rule": "create",
+     "frameIndex": 1,
+     "entity": "payer",
+     "verdict": "pass"
+    },
+    {
+     "rule": "storage",
+     "frameIndex": 1,
+     "entity": "payer",
+     "verdict": "pass"
+    },
+    {
+     "rule": "COD-010",
+     "frameIndex": 1,
+     "entity": "payer",
+     "verdict": "pass"
+    },
+    {
+     "rule": "entrypoint-access",
+     "frameIndex": 1,
+     "entity": "payer",
+     "verdict": "pass"
+    },
+    {
+     "rule": "mempool",
+     "verdict": "pass"
+    }
+   ],
+   "frames": [
+    {
+     "mode": 1,
+     "flags": 0,
+     "target": "0x0000000000000000000000000000000000008141",
+     "limits": {
+      "execution": "0x1388",
+      "state": "0x0"
+     },
+     "value": "0x0",
+     "data": "0x000000006aecd730"
+    },
+    {
+     "mode": 1,
+     "flags": 3,
+     "target": null,
+     "limits": {
+      "execution": "0xea60",
+      "state": "0x0"
+     },
+     "value": "0x0",
+     "data": "0x"
+    },
+    {
+     "mode": 2,
+     "flags": 0,
+     "target": "0x5544596212F91984C986A919C8026DF0576816f9",
+     "limits": {
+      "execution": "0xc350",
+      "state": "0x0"
+     },
+     "value": "0x38d7ea4c68000",
+     "data": "0x"
+    }
+   ],
+   "frameStatuses": [
+    "success",
+    "success",
+    "success"
+   ],
+   "includer": "0x5544596212f91984c986a919c8026df0576816f9"
+  }
+ },
+ "rejected": {
+  "txHash": "0xabababababababababababababababababababababababababababababababab",
+  "admission": {
+   "outcome": "rejected",
+   "errorCode": -32602,
+   "checks": [
+    {
+     "rule": "gas-limit",
+     "verdict": "pass"
+    },
+    {
+     "rule": "prefix",
+     "verdict": "pass"
+    },
+    {
+     "rule": "structure",
+     "verdict": "fail",
+     "detail": "validation prefix execution gas sum 120000 + signature-verification cost 100 = 120100 exceeds MAX_VERIFY_GAS 100000"
+    },
+    {
+     "rule": "signature",
+     "verdict": "skipped"
+    },
+    {
+     "rule": "simulation",
+     "verdict": "skipped"
+    },
+    {
+     "rule": "mempool",
+     "verdict": "skipped"
+    }
+   ]
+  }
+ }
+}

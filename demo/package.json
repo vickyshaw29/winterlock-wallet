@@ -1,10 +1,13 @@
 {
   "name": "demo",
-  "module": "index.ts",
+  "description": "Scene scripts that drive the backend's HTTP API; lanes.ts is the parallel-lanes CLI (plan and burst)",
+  "module": "lanes.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "bun check"
+    "lanes": "bun lanes.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit -p ."
   },
   "devDependencies": {
     "@types/bun": "latest"

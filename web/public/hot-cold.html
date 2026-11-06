@@ -1,0 +1,155 @@
+<!doctype html>
+<!-- Hot and cold screen (spec, Use cases), in the Ledger direction: the cold device's book (the key register, its four
+     forms) and the phone's next ticket, split by a perforation, over the lane board. Written with Claude Code (AI) for Vicky. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Hot and cold, Winterlock</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="hot-cold.css">
+<script type="module" src="hot-cold.js"></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./" data-keep-wallet>Winterlock</a>
+  <nav class="screens" aria-label="Screens">
+    <a href="hot-cold.html" data-keep-wallet aria-current="page">Hot and cold</a>
+    <a href="agent.html" data-keep-wallet>Agent</a>
+    <a href="session.html" data-keep-wallet>Session</a>
+  </nav>
+</header>
+
+<div class="banner-wrap"><div id="banner" class="banner" role="alert" hidden><span id="banner-text"></span><button class="btn" type="button" id="banner-retry">Try again</button></div></div>
+<section id="wallet-head" class="wallet-head" aria-label="Wallet"><p class="muted">Loading the wallet…</p></section>
+<p id="notice" class="notice-line" role="status" aria-live="polite"></p>
+
+<main>
+  <fieldset data-sends class="scene" id="scene-fields">
+    <button class="btn" type="button" id="play">Play scene</button>
+    <p class="hint">The cold device cuts tickets if the phone has fewer than 7, then goes offline; the phone pays three times on the alt mempool as parallel lanes, the third one the stuck payment (a 4-second first deadline, so it should miss its block); then the mempool switches to public (one pending per sender, not yet confirmed on the devnet) and the phone pays three more times, each shown admitted or refused as the backend reports it.</p>
+  </fieldset>
+
+  <!-- the instrument: the cold device's book on the left, the perforation, the phone's tickets on the right -->
+  <div class="panes instrument">
+    <section class="pane" id="cold-pane" aria-labelledby="cold-title">
+      <div class="pane-head">
+        <h2 id="cold-title">Cold device</h2>
+        <label class="toggle"><input type="checkbox" id="offline"> Offline</label>
+      </div>
+      <fieldset data-sends id="cold-fields">
+        <div class="group tree">
+          <h3>Key tree</h3>
+          <div id="register"></div>
+          <dl class="facts-inline" id="tree-summary"></dl>
+        </div>
+        <!-- the four forms: open on a laptop; below 600 px each folds into a section, closed on a phone (hot-cold.js) -->
+        <div class="forms">
+          <details class="fold" id="fold-transfer" open>
+            <summary><h3>Transfer</h3></summary>
+            <form id="transfer-form" class="group" novalidate>
+              <p class="hint">Large transfers go through the cold device: a keyed lane on the next cold leaf, to any address, no cap.</p>
+              <label class="field"><span>To</span><input type="text" class="num" id="transfer-to" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+              <div class="row">
+                <label class="field"><span>Amount, ETH</span><input type="text" class="num" id="transfer-amount" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+                <button class="btn primary" id="transfer" type="submit">Send from cold</button>
+              </div>
+              <span class="problem" id="transfer-problem" hidden></span>
+            </form>
+          </details>
+          <details class="fold" id="fold-policy" open>
+            <summary><h3>Hot policy</h3></summary>
+            <form id="policy-form" class="group" novalidate>
+              <div class="row">
+                <label class="field"><span>Value cap, ETH</span><input type="text" class="num" id="policy-value" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+                <label class="field"><span>Fee cap, ETH</span><input type="text" class="num" id="policy-fee" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+              </div>
+              <label class="field"><span>Allowed target</span><input type="text" class="num" id="policy-target" autocomplete="off" spellcheck="false"></label>
+              <label class="field"><span>Hot start (first hot leaf)</span><input type="number" class="num" id="policy-start" min="1" step="1"><span class="hint">Kept or lowered, never raised within an epoch.</span></label>
+              <div class="row"><button class="btn primary" id="policy-set" type="submit">Set policy</button><span class="hint">A value cap of 0 is the kill switch for every ticket.</span></div>
+            </form>
+          </details>
+          <details class="fold" id="fold-cut" open>
+            <summary><h3>Tickets for the phone</h3></summary>
+            <form id="cut-form" class="group" novalidate>
+              <p class="hint" id="cut-left"></p>
+              <div class="row">
+                <label class="field"><span>Count</span><input type="number" class="num" id="cut-count" min="1" max="64" step="1"></label>
+                <button class="btn" id="cut" type="submit">Cut tickets</button>
+              </div>
+            </form>
+          </details>
+          <details class="fold" id="fold-rotate" open>
+            <summary><h3>Rotation</h3></summary>
+            <form id="rotate-form" class="group" novalidate>
+              <p class="warning">Rotation invalidates every pending lane.</p>
+              <div class="row">
+                <label class="field"><span>New tree height</span><input type="number" class="num" id="rotate-height" min="2" max="12" step="1"></label>
+                <button class="btn" id="rotate" type="submit">Rotate root</button>
+              </div>
+              <p class="hint">The backend refuses to rotate while a lane is in flight; the wallet moves to the new epoch once the rotation is included.</p>
+            </form>
+          </details>
+        </div>
+      </fieldset>
+    </section>
+
+    <div class="spine" aria-hidden="true"></div>
+
+    <section class="pane" id="phone-pane" aria-labelledby="phone-title">
+      <div class="pane-head">
+        <h2 id="phone-title">Phone</h2>
+        <p>the backend's ticket device: signs from its ticket files, never from the seed</p>
+      </div>
+      <fieldset data-sends id="phone-fields">
+        <div class="group count-group">
+          <p class="count" id="ticket-count"><span class="roll" id="count-n">—</span><span id="count-of"></span></p>
+          <p class="hint" id="ticket-note">tickets left of those cut</p>
+          <p class="warning" id="device-issue" role="status" hidden></p>
+        </div>
+        <ol class="stubs" id="stubs" aria-label="Tickets cut to the phone" hidden></ol>
+        <form id="pay-form" class="group" novalidate>
+          <!-- the next ticket: what the device signs next, the caps printed under the amount, the machine line -->
+          <div class="paper perforated ticket" id="ticket">
+            <div class="ticket-head">
+              <p class="ticket-serial"><span class="visually-hidden">Next ticket, leaf </span><span class="roll" id="ticket-serial">—</span></p>
+              <p class="ticket-kind">hot ticket</p>
+            </div>
+            <label class="field"><span>To, the allowed target</span><input type="text" class="num" id="pay-to" readonly></label>
+            <label class="field"><span>Amount, ETH</span><span class="amount-box"><input type="text" class="num" id="pay-amount" inputmode="decimal" autocomplete="off" spellcheck="false" aria-describedby="pay-cap pay-problem"><span class="unit" aria-hidden="true">ETH</span></span>
+              <span class="hint" id="pay-cap"></span><span class="problem" id="pay-problem" hidden></span></label>
+            <p class="machine" id="machine"></p>
+          </div>
+          <div class="row">
+            <button class="btn primary" id="pay" type="submit">Pay</button>
+            <button class="btn" id="stuck" type="button">Simulate stuck payment</button>
+          </div>
+          <p class="hint">The stuck payment's first try gets only 4 seconds, less than one 6-second block of the devnet, so it should miss its block and expire: its ticket is burned. A few tries in a hundred still land in time, when the relay's 10-second pass and the next block both fall inside the 4 seconds. Then one retry goes out on a fresh lane with the normal deadline (90 s). Both offer the market's fee. A low fee would not make it stuck: on this devnet a fee below the 7-wei base fee is refused at admission, and any fee above it is included. The expired leaf is never re-signed and never fee-bumped.</p>
+        </form>
+        <p class="set-aside" id="phone-set-aside"></p>
+      </fieldset>
+    </section>
+  </div>
+
+  <section class="board" aria-labelledby="board-title">
+    <div class="board-head">
+      <h2 id="board-title">Lane board</h2>
+      <div class="controls">
+        <span id="mempool-label">Mempool</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="mempool-label">
+          <label><input type="radio" name="mempool" value="alt" checked><span>alt</span></label>
+          <label><input type="radio" name="mempool" value="public"><span>public</span></label>
+        </div>
+      </div>
+    </div>
+    <p id="set-aside" class="set-aside"></p>
+    <div id="lanes"></div>
+    <p id="lane-limits" class="lane-limits"></p>
+  </section>
+</main>
+
+<footer id="status" class="status-line" aria-label="Status"></footer>
+</body>
+</html>

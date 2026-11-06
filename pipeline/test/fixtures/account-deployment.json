@@ -1,0 +1,17 @@
+{
+ "source": "pipeline/scripts/deploy-account.ts on the devnet (chain 1337), Nov 6, after the review fixes; public addresses and creation arguments",
+ "factory": "0x0b9bec42f5d25f4adda7598bdc3cc80d23d6fd47",
+ "implementation": "0x4e7e86ac3ed64c8df50b276e72e19f8882f1fdde",
+ "account": "0x383452828ddcf9a7afa704c693cb3025eb90a6ad",
+ "params": {
+  "root": "0xff7d6d9cf4555db548259f7f1fac9b4658e61fd296b81199e06599c1b9533709",
+  "treeSeed": "0xd5f7957fc1292bd17b77e15850912ab5e7e358f021f0b861812e683af4938e2c",
+  "height": 10,
+  "owner": "0xe8CC33DDd7Aa454c2Ce7f9473CC51d68352dD57d",
+  "hotStart": 1008,
+  "hotValueCap": "10000000000000000",
+  "hotFeeCap": "2000000000000000",
+  "allowedTarget": "0x5544596212F91984C986A919C8026DF0576816f9",
+  "salt": "0x0b223c93796a2d36ed88f247e7ad742acf10a3a588e102be4dd55d762f507ea5"
+ }
+}

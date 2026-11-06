@@ -25,10 +25,7 @@ fn main() -> ExitCode {
             let _ = e.print();
             return ExitCode::SUCCESS;
         }
-        Err(e) => Err(fail(
-            "bad_args",
-            e.to_string().lines().next().unwrap_or_default(),
-        )),
+        Err(e) => Err(fail("bad_args", clap_detail(&e))),
     };
     match result {
         Ok(value) => {
@@ -40,4 +37,15 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Clap's message up to its first blank line, on one line. A missing flag's name sits on the
+/// line after "the following required arguments were not provided:", so keep every line.
+fn clap_detail(e: &clap::Error) -> String {
+    e.to_string()
+        .lines()
+        .take_while(|line| !line.trim().is_empty())
+        .map(str::trim)
+        .collect::<Vec<_>>()
+        .join(" ")
 }

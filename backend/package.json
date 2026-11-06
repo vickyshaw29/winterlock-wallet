@@ -1,0 +1,19 @@
+{
+  "name": "@winterlock/backend",
+  "description": "HTTP backend over the pipeline: wallets, keyed and hot sends, rotation, hot policy, ticket cuts (spec, Shared interfaces 5)",
+  "type": "module",
+  "private": true,
+  "module": "src/main.ts",
+  "scripts": {
+    "start": "bun src/main.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "viem": "^2.57.16"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
+  }
+}

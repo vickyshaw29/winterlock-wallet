@@ -1,0 +1,124 @@
+<!doctype html>
+<!-- Agent screen (spec, AI agent reacting to the market): a mock price, the rule that fires four tranches on four lanes,
+     the allowance card, and the compromised-server refusal. Written with Claude Code (AI) for Vicky.
+     Ledger direction (1-ledger.md): three columns of one sheet, no perforation between them; the agent's tickets are a stub strip. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Agent, Winterlock</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="agent.css">
+<script type="module" src="agent.js"></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./" data-keep-wallet>Winterlock</a>
+  <nav class="screens" aria-label="Screens">
+    <a href="hot-cold.html" data-keep-wallet>Hot and cold</a>
+    <a href="agent.html" data-keep-wallet aria-current="page">Agent</a>
+    <a href="session.html" data-keep-wallet>Session</a>
+  </nav>
+</header>
+
+<div class="banner-wrap"><div id="banner" class="banner" role="alert" hidden><span id="banner-text"></span><button class="btn" type="button" id="banner-retry">Try again</button></div></div>
+<section id="wallet-head" class="wallet-head" aria-label="Wallet"><p class="muted">Loading the wallet…</p></section>
+<p id="notice" class="notice-line" role="status" aria-live="polite"></p>
+
+<main>
+  <fieldset data-sends class="scene" id="scene-fields">
+    <button class="btn" type="button" id="play">Play scene</button>
+    <p class="hint">Cuts tickets if the agent has fewer than 6; the mock price falls and the rule fires four tranches at once as parallel lanes on the alt mempool; then the server is compromised and sends two payments outside the hot policy.</p>
+  </fieldset>
+  <div class="panes agent-panes">
+    <section class="pane market" aria-labelledby="market-title">
+      <div class="pane-head">
+        <h2 id="market-title">Market</h2>
+        <p>mock price, simulated in this page, not a market feed</p>
+      </div>
+      <div class="group">
+        <p class="hint">Mock ETH price</p>
+        <p class="price-line">
+          <span class="price" id="price">—</span>
+          <span class="change" id="change">—</span>
+        </p>
+        <svg class="sparkline" id="spark" role="img" tabindex="0" aria-describedby="spark-readout"></svg>
+        <p class="hint num" id="spark-readout">Hover or focus the line to read a price.</p>
+      </div>
+      <div class="rule-box">
+        <p class="rule-label">Agent rule</p>
+        <p class="rule-text" id="rule-text">If price falls more than 2 % in 30 s, buy in 4 tranches.</p>
+      </div>
+      <fieldset data-sends id="agent-fields">
+        <label class="toggle"><input type="checkbox" id="armed"> Rule armed</label>
+        <div class="row">
+          <button class="btn" type="button" id="drop">Drop the mock price 3 %</button>
+          <button class="btn primary" type="button" id="fire">Fire now</button>
+        </div>
+        <p class="hint" id="fire-hint"></p>
+        <div class="plan" id="fire-plan" aria-live="polite" hidden></div>
+      </fieldset>
+    </section>
+
+    <section class="pane allowance" aria-labelledby="allowance-title">
+      <div class="pane-head">
+        <h2 id="allowance-title">Allowance</h2>
+        <p>the agent's hot tickets</p>
+      </div>
+      <div class="group">
+        <p class="count" id="agent-count"><span class="roll" id="agent-count-n">0</span><span id="agent-count-of"> of 0</span></p>
+        <p class="hint" id="agent-count-note"></p>
+        <p class="warning" id="device-issue" role="status" hidden></p>
+        <ol class="stubs" id="stubs" aria-label="The agent's tickets" hidden></ol>
+      </div>
+      <dl class="facts-inline" id="allowance"></dl>
+      <div class="total" id="max-loss">
+        <p class="total-line"><span class="total-label">Max loss</span> <span class="total-fig num" id="max-loss-fig">—</span></p>
+        <p class="hint" id="max-loss-note"></p>
+      </div>
+      <p class="set-aside" id="agent-set-aside"></p>
+      <div class="group expiry">
+        <p class="expires"><span class="hint">Expires in</span> <span class="num">—</span></p>
+        <div class="row">
+          <button class="btn" type="button" disabled>Renew from cold device</button>
+          <button class="btn" type="button" disabled>Stop renewing</button>
+        </div>
+        <p class="proposed">Recent-root expiry: proposed (Level B), not built. Today the authority ends when the tickets run out or the cold device sets the value cap to 0.</p>
+      </div>
+      <fieldset data-sends id="compromise-fields">
+        <div class="row">
+          <button class="btn" type="button" id="compromised">Server compromised</button>
+          <span class="hint">Sends two payments outside the hot policy: ten times the value cap to the allowed target, and a tenth of the cap to a new address. The account refuses both (exceeds value cap, target not allowed), and each burns its ticket.</span>
+        </div>
+      </fieldset>
+    </section>
+
+    <section class="pane daybook" aria-labelledby="log-title">
+      <div class="pane-head"><h2 id="log-title">Event log</h2><p>trigger, lanes, inclusions</p></div>
+      <ol class="log" id="log" aria-live="polite"></ol>
+      <p class="hint" id="log-empty">No entries yet. Fire, or arm the rule and drop the mock price.</p>
+    </section>
+  </div>
+
+  <section class="board" aria-labelledby="board-title">
+    <div class="board-head">
+      <h2 id="board-title">Lane board</h2>
+      <div class="controls">
+        <span id="mempool-label">Mempool</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="mempool-label">
+          <label><input type="radio" name="mempool" value="alt" checked><span>alt</span></label>
+          <label><input type="radio" name="mempool" value="public"><span>public</span></label>
+        </div>
+      </div>
+    </div>
+    <p id="set-aside" class="set-aside"></p>
+    <div id="lanes"></div>
+    <p id="lane-limits" class="lane-limits"></p>
+  </section>
+</main>
+
+<footer id="status" class="status-line" aria-label="Status"></footer>
+</body>
+</html>
