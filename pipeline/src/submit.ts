@@ -25,7 +25,8 @@
 //     after its methods return (Journal.durable) is waited for before the leaf signs and before the transaction is sent.
 import type { Address, Hex } from "viem";
 import { DEFAULTS, EXPIRY_VERIFIER, EXPIRY_VERIFIER_CODE, NONCE_MANAGER, NONCE_MANAGER_CODE } from "./config.ts";
-import { buildFrameTx, nonceManagerSlot, type Call } from "./builder.ts";
+import { buildFrameTx, nonceKeyFor, nonceManagerSlot, type Call } from "./builder.ts";
+import { encodeRawFrameTx } from "./codec/codec.ts";
 import { placeholders, signFrameTx, type SignatureSlot } from "./signer.ts";
 import { RpcError, receiptSucceeded, simulationVerdict, toWire, type FrameTxReceipt, type SimulationResult } from "./rpc.ts";
 import { defaultNetwork, type Network } from "./network.ts";
@@ -567,6 +568,162 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
   else j.mark(leaf, "onchain", { note: `included by block ${result.decidedAt}, but no receipt was readable: which frames succeeded is unknown; read the receipt before paying again` });
   const admission = p.admission === false || mempool === "public" ? null : await admissionReport(txHash, net).catch(() => null);
   return { ...result, leaf, nonceKey, sigHash: signed.sigHash, deadline, simulation, admission, grind: ground };
+}
+
+export interface SignPreparedParams {
+  journal: Journal;
+  /** a leaf the caller reserved earlier and never signed (MetaMask: reserved by eth_prepareUserOperation) */
+  leaf: number;
+  sender: Address;
+  calls: Call[];
+  /** declared execution limit of the self_verify frame */
+  verifyGas: bigint;
+  /** signature entries for the leaf, in order; checked against it */
+  signatures: (leaf: number) => SignatureSlot[];
+  /** the fees the user approved, exactly; never ground */
+  fees: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
+  expirySeconds?: number;
+  /** grinding: the last SENDER frame's execution limit rises by one gas per try, at most maxTries */
+  grind: Omit<GrindConfig, "verifyGasLimit">;
+  /** the unsigned transaction after grinding, before the leaf signs; a throw stops here and the leaf stays reserved, unsigned */
+  checkUnsigned?: (tx: FrameTransaction) => void | Promise<void>;
+  /** the signed transaction, before it is recorded or shown to anyone; a throw burns the leaf */
+  checkSigned?: (tx: FrameTransaction) => void;
+  /** run ethrex_simulateFrameTransaction after recording, and burn the leaf if it says invalid */
+  preflight?: boolean;
+  network?: Network;
+}
+
+export interface SignedPrepared {
+  leaf: number;
+  nonceKey: bigint;
+  tx: FrameTransaction;
+  /** 0x06 ‖ rlp: what the caller hands on */
+  raw: Hex;
+  txHash: Hex;
+  sigHash: Hex;
+  deadline: number;
+  simulation: SimulationResult | null;
+  grind: GrindInfo;
+}
+
+/**
+ * Signs one transaction with a leaf reserved earlier, and sends nothing: for a host that hands the signed transaction
+ * on (MetaMask Flask carries it to the local bundler as a user operation, Nov 6). The leaf must still be "reserved",
+ * so it never signed before; it signs once, and it is "submitted" (hash and deadline stored, durably) before the
+ * signed transaction is shown to anyone, the node's dry run included. So a leaf still "reserved" after a crash was
+ * never seen outside this process, and the follow-up (settleSubmitted) finds every transaction that may land.
+ * The fees are the user's, exactly; grinding moves the last SENDER frame's limit, at most grind.maxTries gas.
+ */
+export async function signPrepared(p: SignPreparedParams): Promise<SignedPrepared> {
+  const j = p.journal;
+  const net = p.network ?? defaultNetwork;
+  const chainId = net.chainId;
+  const leaf = p.leaf;
+  const fail = (msg: string, cause?: unknown): never => { throw new SendError(msg, { stage: "check", leaf, cause }); };
+
+  // 0. Checks that change nothing. The leaf stays reserved and unsigned if one fails.
+  const mismatch = journalMismatch(j, p.sender, chainId);
+  if (mismatch) fail(mismatch);
+  const rec = j.get(leaf);
+  if (!rec || rec.status !== "reserved") fail(`leaf ${leaf} is ${rec ? rec.status : "not in the journal"}: only a leaf reserved and never signed may sign`);
+  const nonceKey = nonceKeyFor(j.epoch, leaf);
+  if (BigInt(rec!.nonceKey) !== nonceKey) fail(`internal: leaf ${leaf}'s journal key ${rec!.nonceKey} is not 0x${nonceKey.toString(16)}`);
+  if (p.calls.length === 0) fail("a transaction needs at least one call");
+  const expiry = p.expirySeconds ?? DEFAULTS.expirySeconds;
+  if (!Number.isInteger(expiry) || expiry < 1 || expiry > 86_400) fail(`expirySeconds must be a whole number of seconds from 1 to 86,400, got ${expiry}`);
+  const maxSteps = maxStepsFor({ ...p.grind, verifyGasLimit: p.verifyGas });
+  if (maxSteps < WOTS.bestSteps) fail(`verify limit ${p.verifyGas} leaves room for ${maxSteps} chain steps; even the best message needs ${WOTS.bestSteps}`);
+  if (p.fees.maxPriorityFeePerGas > p.fees.maxFeePerGas) fail(`maxPriorityFeePerGas ${p.fees.maxPriorityFeePerGas} is above maxFeePerGas ${p.fees.maxFeePerGas}`);
+  let chainNow: number, seq: bigint;
+  try {
+    await checkSystemContracts(net);
+    chainNow = Number(await net.node.blockTimestamp());
+    seq = BigInt(await net.node.storage(NONCE_MANAGER, nonceManagerSlot(p.sender, nonceKey)));
+  } catch (e) {
+    return fail(`cannot start: ${message(e)}`, e);
+  }
+  const localNow = nowSeconds();
+  if (Math.abs(localNow - chainNow) > DEFAULTS.maxClockSkewSeconds) {
+    fail(`host clock ${localNow} and the latest block's timestamp ${chainNow} differ by more than ${DEFAULTS.maxClockSkewSeconds} s: the deadline would be wrong`);
+  }
+  if (seq !== 0n) {
+    j.mark(leaf, "burned", { note: `key already at sequence ${seq} on chain, missing from this journal` });
+    throw new SendError(`leaf ${leaf}: its nonce key is already used on chain; it was burned, send again`, { stage: "check", leaf, nonceKey });
+  }
+  const deadline = Math.max(localNow, chainNow) + expiry;
+  const lastGas = p.calls.at(-1)!.gas ?? DEFAULTS.transferGas;
+  let slots: SignatureSlot[], unsigned: FrameTransaction, ground: GrindInfo;
+  try {
+    slots = p.signatures(leaf);
+    checkSlots(slots, leaf, j);
+    const g = grind((i) => {
+      const gas = lastGas + BigInt(i);
+      return {
+        value: gas,
+        tx: buildFrameTx({
+          chainId, sender: p.sender, nonce: { keys: [nonceKey], seq: 0n }, verifyGas: p.verifyGas,
+          calls: p.calls.map((c, k) => (k === p.calls.length - 1 ? { ...c, gas } : c)),
+          deadline, fees: p.fees, signatures: placeholders(slots),
+        }),
+      };
+    }, { ...p.grind, verifyGasLimit: p.verifyGas });
+    unsigned = g.tx;
+    ground = { field: "lastFrameGas", steps: g.steps, maxSteps: g.maxSteps, tries: g.tries };
+    await p.checkUnsigned?.(unsigned);
+  } catch (e) {
+    return fail(`leaf ${leaf} not signed: ${message(e)}`, e);
+  }
+  const at = (stage: SendStage, extra: Omit<SendErrorInfo, "stage" | "leaf" | "nonceKey"> = {}): SendErrorInfo => ({ stage, leaf, nonceKey, grind: ground, ...extra });
+  if (j.durable) {
+    try {
+      await j.durable();
+    } catch (e) {
+      throw new SendError(`leaf ${leaf}: the journal could not store its writes; nothing was signed: ${message(e)}`, at("prepare", { cause: e }));
+    }
+  }
+
+  // 1. Sign, once. From here on the leaf never signs again.
+  let signed: { tx: FrameTransaction; sigHash: Hex };
+  try {
+    signed = await signFrameTx(unsigned, slots);
+    p.checkSigned?.(signed.tx);
+  } catch (e) {
+    j.mark(leaf, "burned", { note: `signing failed, nothing left this process: ${message(e)}` });
+    throw new SendError(`leaf ${leaf}: signing failed: ${message(e)}`, at("sign", { cause: e }));
+  }
+  const txHash = frameTxHash(signed.tx);
+
+  // 2. Recorded, durably, before anyone sees it: from here on it may land, and settleSubmitted follows it.
+  j.mark(leaf, "submitted", { txHash, deadline });
+  if (j.durable) {
+    try {
+      await j.durable();
+    } catch (e) {
+      try { j.mark(leaf, "burned", { note: `its hash could not be stored, so it was never handed on: ${message(e)}` }); } catch { /* the journal is broken */ }
+      throw new SendError(`leaf ${leaf}: the journal could not store the transaction's hash; nothing was handed on: ${message(e)}`, at("submit", { cause: e }));
+    }
+  }
+
+  // 3. Optional dry run on the node, of exactly this transaction.
+  let simulation: SimulationResult | null = null;
+  if (p.preflight) {
+    let verdict: { ok: boolean; reason: string | null };
+    try {
+      simulation = await net.node.simulate(signed.tx);
+      if (!simulation || typeof simulation !== "object") throw new Error(`the node answered ${JSON.stringify(simulation)}, not a simulation`);
+      verdict = simulationVerdict(simulation);
+    } catch (e) {
+      j.mark(leaf, "burned", { note: `preflight: ${message(e)}` });
+      const refused = e instanceof RpcError && e.refused;
+      throw new (refused ? PreflightRefused : SendError)(`leaf ${leaf}: preflight ${refused ? "refused" : "failed"}: ${message(e)}`, at("preflight", { txHash, deadline, cause: e }));
+    }
+    if (!verdict.ok) {
+      j.mark(leaf, "burned", { note: `preflight: ${verdict.reason}` });
+      throw new PreflightRefused(`leaf ${leaf}: preflight refused: ${verdict.reason}`, at("preflight", { txHash, deadline, simulation }));
+    }
+  }
+  return { leaf, nonceKey, tx: signed.tx, raw: encodeRawFrameTx(signed.tx), txHash, sigHash: signed.sigHash, deadline, simulation, grind: ground };
 }
 
 /**
