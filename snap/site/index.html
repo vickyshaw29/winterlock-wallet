@@ -1,0 +1,98 @@
+<!doctype html>
+<!-- Winterlock Flask companion: connect, create and fund an account, then send using the Snap's one-time keys.
+     Written with Claude Code (AI) for Vicky. Redesigned with Codex (OpenAI) for Vicky. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Flask wallet, Winterlock</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/shell.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body class="snap-app">
+<a class="skip-link" href="#workspace">Skip to content</a>
+<header class="top">
+  <a class="brand" href="http://127.0.0.1:5173/" data-workspace-page="/"><svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 9l6 15 6-15 6 15 6-15M10 9l6 15 6-15" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg><span>Winterlock</span></a>
+  <nav class="screens" aria-label="Screens">
+    <a href="http://127.0.0.1:5173/" data-workspace-page="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M14 10h7v5h-7z"/></svg><span>Wallets</span></a>
+    <a href="http://127.0.0.1:5173/hot-cold.html" data-workspace-page="/hot-cold.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="11" height="14" rx="2"/><rect x="16" y="9" width="5" height="11" rx="1"/><path d="M6 21h5M7 8h3"/></svg><span>Hot and cold</span></a>
+    <a href="http://127.0.0.1:5173/agent.html" data-workspace-page="/agent.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 15l5-5 4 3 8-9M16 4h4v4M4 21h16"/></svg><span>Agent</span></a>
+    <a href="http://127.0.0.1:5173/session.html" data-workspace-page="/session.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 8h2v2H8zM14 8h2v2h-2zM8 14h2v2H8zM14 14h2v2h-2z"/></svg><span>Session</span></a>
+    <a class="flask-link" href="/" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3h8M10 3v6l-6 9a2 2 0 001.7 3h12.6a2 2 0 001.7-3l-6-9V3M8 14h8"/></svg><span>Flask wallet</span></a>
+  </nav>
+  <div class="rail-foot">
+    <div class="rail-note"><span class="security-mark" aria-hidden="true"></span><span>Post-quantum account<small>One-time signing keys</small></span></div>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Use dark theme" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 019.5 4 8.5 8.5 0 1020 14.5z"/></svg><span>Dark appearance</span></button>
+  </div>
+</header>
+<section class="page-intro" aria-labelledby="page-title">
+  <div><h1 id="page-title">Flask wallet</h1><p>Your keys stay in the Snap. Connect Flask to create your account and send with Winterlock.</p></div>
+  <div class="workspace-context"><span class="network-pill">Devnet 1337</span><span class="connection-state" id="connection-state">Flask required</span></div>
+</section>
+<main id="workspace">
+  <ol class="setup-progress" aria-label="Wallet setup">
+    <li data-phase="connect" aria-current="step"><span class="phase-n" aria-hidden="true">1</span><span>Connect Flask<small>Install the Winterlock Snap</small></span></li>
+    <li data-phase="account"><span class="phase-n" aria-hidden="true">2</span><span>Create account<small>Deployment paid from Flask</small></span></li>
+    <li data-phase="send"><span class="phase-n" aria-hidden="true">3</span><span>Fund and send<small>Payments signed by Winterlock</small></span></li>
+  </ol>
+  <p id="flask-missing" class="notice" role="status" hidden>This local Snap runs in MetaMask Flask. <a href="https://docs.metamask.io/snaps/get-started/install-flask/" target="_blank" rel="noopener noreferrer">Install Flask</a> to continue. In Brave, choose Extensions (no fallback) as the Ethereum wallet.</p>
+  <div class="setup-layout">
+    <div class="setup-authority">
+      <section class="setup-section" aria-labelledby="s1">
+        <div class="pane-head"><h2 id="s1">Connect Flask</h2><span class="section-step">Step 1</span></div>
+        <p class="section-copy">Install the Winterlock Snap in MetaMask Flask. The Snap generates and keeps your post-quantum signing keys.</p>
+        <div class="actions"><button class="btn primary" id="connect" type="button">Connect Flask</button><button class="btn" id="add-devnet" type="button">Add devnet to Flask</button></div>
+        <div class="faucet-line"><span>Need funds for setup?</span><button class="link" id="faucet" type="button">Get 1 test ETH</button></div>
+        <p id="connect-result" class="result" aria-live="polite" hidden></p>
+        <details class="connection-details" id="connection-details"><summary>Account and key details</summary>
+          <dl class="snap-facts">
+            <div><dt>Flask funding account</dt><dd id="eoa" class="hex">Not connected</dd></div>
+            <div><dt>Funding balance</dt><dd id="eoa-balance">—</dd></div>
+            <div><dt>Flask network</dt><dd id="network">—</dd></div>
+            <div><dt>Snap key tree</dt><dd id="tree">—</dd></div>
+            <div><dt>Merkle root</dt><dd id="root" class="hex">—</dd></div>
+            <div><dt>Chain id</dt><dd id="chain">—</dd></div>
+          </dl>
+        </details>
+      </section>
+      <section class="setup-section account-setup" aria-labelledby="s2">
+        <div class="pane-head"><h2 id="s2">Create your account</h2><span class="section-step">Step 2</span></div>
+        <p class="section-copy">Your Ethereum account in Flask pays the deployment gas. The signing keys stay inside the Winterlock Snap.</p>
+        <div id="no-account">
+          <div class="actions"><button class="btn primary" id="create" type="button">Create account using Flask</button><button class="btn" id="check-account" type="button" hidden>Check account</button></div>
+          <p class="note">Approximately 0.95M gas. Review and confirm the deployment in Flask.</p>
+        </div>
+        <div id="has-account" hidden>
+          <dl class="snap-facts account-facts"><div><dt>Winterlock account</dt><dd><a id="account-link" class="hex" target="_blank" rel="noopener noreferrer"></a></dd></div><div><dt>Account balance</dt><dd id="account-balance">—</dd></div></dl>
+          <form id="fund-form" novalidate><div class="row"><label class="field" for="fund-amount"><span>Add ETH from your Flask account</span><input id="fund-amount" class="num" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.05" required></label><button class="btn" id="fund" type="submit">Fund from Flask</button></div></form>
+        </div>
+        <p id="lanes-wait" class="notice" hidden>Waiting for pending lanes: a funding or deployment transaction could push them out of the block.</p>
+        <p id="account-result" class="result" aria-live="polite" hidden></p>
+      </section>
+    </div>
+    <section class="snap-send" aria-labelledby="s3">
+      <div class="pane-head"><h2 id="s3">Send with Winterlock</h2><span class="section-step">Step 3</span></div>
+      <p class="section-copy">The Snap signs each payment with a fresh one-time key, on its own lane.</p>
+      <p class="send-readiness" id="send-readiness">Create and fund your Winterlock account before sending.</p>
+      <form id="send-form" novalidate>
+        <label class="field" for="send-to"><span>Recipient</span><input id="send-to" name="to" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" required></label>
+        <label class="field" for="send-amount"><span>Amount</span><span class="snap-amount"><input id="send-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.001" required><span class="currency" aria-hidden="true"><svg viewBox="0 0 16 24" fill="currentColor"><path d="M8 0L1 12l7 4 7-4L8 0zm0 18l-7-4 7 10 7-10-7 4z"/></svg>ETH</span></span></label>
+        <div class="signing-note"><span class="security-mark" aria-hidden="true"></span><span>Signed inside the Snap<small>A fresh leaf is used once. Confirm the payment in Flask.</small></span></div>
+        <button class="btn primary" id="send" type="submit">Send with Winterlock Snap</button>
+      </form>
+      <p id="send-result" class="result" aria-live="polite" hidden></p>
+      <section class="live-activity" id="snap-activity" role="status" aria-live="polite" aria-label="Latest payment" hidden></section>
+    </section>
+  </div>
+  <section class="board snap-board" aria-labelledby="s4">
+    <div class="board-head"><div><h2 id="s4">Lane board</h2><p class="hint">Each send uses its own leaf and nonce key. Follow its progress here.</p></div></div>
+    <div class="table-wrap"><table><caption class="visually-hidden">One row per leaf the Snap has used, newest first</caption><thead><tr><th scope="col">Leaf</th><th scope="col">Lane</th><th scope="col">Status</th><th scope="col">Transaction</th></tr></thead><tbody id="lanes"><tr><td colspan="4" class="empty">No sends yet. Connect Flask, create your account, then send with the Snap.</td></tr></tbody></table></div>
+    <p id="poll" class="note">The lane board updates after you connect.</p>
+  </section>
+</main>
+<footer id="status" class="status-line"><span>Alt-mempool devnet, chain 1337</span><span>The seed stays inside the Snap</span></footer>
+</body>
+</html>
