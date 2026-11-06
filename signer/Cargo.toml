@@ -2,6 +2,7 @@
 name = "signer"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 tiny-keccak = { version = "2", features = ["keccak"] }
