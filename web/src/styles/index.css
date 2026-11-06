@@ -1,0 +1,211 @@
+/* Account selection and a deliberately short creation path. Written with Codex (OpenAI) for Vicky. */
+.panes.start {
+  grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
+  gap: 48px;
+  align-items: start;
+}
+.start > .pane {
+  gap: 24px;
+}
+.start > .pane:first-child {
+  padding-top: 4px;
+}
+.start > .pane:last-child {
+  padding: 28px;
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+  background: var(--stock);
+}
+.start .pane-head {
+  display: grid;
+  justify-content: start;
+  gap: 5px;
+}
+.wallets {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+}
+.wallets > li {
+  position: relative;
+  display: grid;
+  gap: 22px;
+  padding: 26px 26px 22px;
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  background: var(--stock);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.wallets > li.picked {
+  border-color: var(--ticket-rule);
+  box-shadow: var(--surface-shadow);
+}
+.wallets .summary {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px 28px;
+}
+.wallets .summary .kv:first-child {
+  grid-column: 1/-1;
+  margin: 0;
+  padding: 0 0 14px 48px;
+  position: relative;
+  border-bottom: 1px solid var(--rule);
+}
+.wallets .summary .kv:first-child::before {
+  content: "W";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 38px;
+  background: var(--soft-accent);
+  color: var(--accent);
+  border-radius: 11px;
+  font-size: 17px;
+  font-weight: 800;
+}
+.wallets .summary .kv:first-child dd {
+  font: 400 12px/22px var(--mono);
+  overflow-wrap: anywhere;
+}
+.wallets .summary .kv:nth-child(2) dd {
+  font-size: 28px;
+  line-height: 36px;
+  letter-spacing: -0.045em;
+}
+.wallets .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wallets .links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 9px 13px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background 140ms ease;
+}
+.wallets .links a:first-child {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.wallets .links a:first-child::after {
+  content: "↗";
+  margin-left: 5px;
+}
+.wallets .links a:hover {
+  background: var(--soft-accent);
+  color: var(--accent);
+}
+.create {
+  display: grid;
+  gap: 20px;
+}
+.create h3 {
+  font-size: 14px;
+}
+.create .row {
+  align-items: start;
+}
+.create .row.submit .btn {
+  width: 100%;
+}
+.create .row.submit .hint {
+  font-size: 12px;
+}
+.create-path {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 0 0 4px;
+  color: var(--print);
+  font-size: 12px;
+}
+.create-path span {
+  white-space: nowrap;
+}
+.create-path span:first-child {
+  color: var(--accent);
+}
+.create-path i {
+  height: 1px;
+  background: var(--rule);
+  flex: 1;
+}
+.create-advanced {
+  color: var(--print);
+  font-size: 13px;
+}
+.create-advanced summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+}
+.create-advanced summary::after {
+  content: "+";
+  font-size: 18px;
+}
+.create-advanced[open] summary::after {
+  content: "−";
+}
+.create-advanced > .group {
+  margin-top: 14px;
+}
+.create sup {
+  font-size: 10px;
+  line-height: 0;
+}
+@media (max-width: 1000px) {
+  .panes.start {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr);
+    gap: 28px;
+  }
+  .start > .pane:last-child {
+    padding: 24px;
+  }
+  .wallets > li {
+    padding: 22px;
+  }
+  .wallets .summary {
+    gap: 14px 20px;
+  }
+}
+@media (max-width: 760px) {
+  .panes.start {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .start > .pane:last-child {
+    padding: 22px;
+  }
+  .wallets .summary .kv:first-child dd {
+    font-size: 12px;
+  }
+  .wallets .links a {
+    flex: 1;
+    padding-inline: 10px;
+  }
+  .wallets .summary .kv:nth-child(2) dd {
+    font-size: 25px;
+  }
+  .wallets .summary .kv.lead {
+    grid-column: auto;
+    text-align: left;
+  }
+}

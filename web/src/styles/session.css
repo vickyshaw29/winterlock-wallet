@@ -1,0 +1,242 @@
+/* A bounded session beside the actions it permits. Written with Codex (OpenAI) for Vicky. */
+.panes.session {
+  grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+  gap: 36px;
+  align-items: start;
+  grid-template-areas: "dapp wallet";
+}
+.session > .dapp {
+  grid-area: dapp;
+  padding: 28px;
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+  background: var(--stock);
+  gap: 22px;
+}
+.session > .wallet {
+  grid-area: wallet;
+  padding-top: 4px;
+  gap: 18px;
+}
+.grid6 {
+  display: grid;
+  grid-template-columns: 18px repeat(6, minmax(40px, 1fr));
+  gap: 7px;
+  justify-items: center;
+  width: 100%;
+  padding: 12px 0;
+}
+.grid6 .head {
+  color: var(--print);
+  font-size: 12px;
+  line-height: 22px;
+}
+.grid6 .row-n {
+  justify-self: start;
+  padding-top: 13px;
+}
+.cell {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 5px;
+  width: 100%;
+  min-width: 40px;
+  min-height: 65px;
+  padding: 3px 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+.cell:disabled {
+  cursor: default;
+}
+.cell .hole {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--ledger);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms var(--ease);
+}
+.cell:hover:not(:disabled) .hole {
+  border-color: var(--accent);
+  background: var(--soft-accent);
+  transform: translateY(-2px);
+}
+.cell:active:not(:disabled) .hole {
+  transform: scale(0.95);
+}
+.cell .punch-sn {
+  min-height: 16px;
+  color: var(--print);
+  font: 400 10px/16px var(--mono);
+}
+.cell[data-state="sending"] .hole,
+.cell[data-state="admitted"] .hole {
+  border: 2px dashed var(--accent);
+  background: var(--soft-accent);
+}
+.cell[data-state="included"] .hole {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.cell[data-state="included"] .hole::after {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 12px;
+  width: 9px;
+  height: 15px;
+  border: solid var(--on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.cell[data-state="refused"] .hole,
+.cell[data-state="expired"] .hole {
+  border: 1px dashed var(--danger);
+  background: var(--stock);
+}
+.cell[data-state="refused"] .hole::after,
+.cell[data-state="expired"] .hole::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 21px;
+  border-top: 2px solid var(--danger);
+}
+.hole.m-punch,
+.hole.m-ring,
+.hole.m-void {
+  animation: cell-in 160ms var(--ease) both;
+}
+.punch-sn.m-print {
+  animation: cell-in 160ms var(--ease) both;
+}
+.punch-key {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--ledger);
+}
+.punch-key.is-flight {
+  border: 1px dashed var(--accent);
+  background: var(--soft-accent);
+}
+.punch-key.is-included {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.punch-key.is-burned {
+  border: 1px dashed var(--danger);
+  background: var(--stock);
+}
+.tally {
+  justify-content: space-between;
+  padding: 16px 0;
+  border-top: 1px solid var(--rule);
+}
+.tally dd {
+  font-size: 23px;
+  letter-spacing: -0.04em;
+}
+.sheet {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--ticket-rule);
+  border-radius: 18px;
+  background: var(--vault);
+}
+.sheet h3 {
+  font-size: 17px;
+}
+.sheet .facts-inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.sheet .facts-inline .kv:last-child {
+  grid-column: 1/-1;
+}
+.sheet .row .btn:first-child {
+  flex: 1;
+}
+#sheet-fields:has(> .sheet[hidden]) {
+  display: none;
+}
+.card {
+  padding: 22px;
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  background: var(--stock);
+  gap: 16px;
+}
+.card .count {
+  font-size: 40px;
+  line-height: 48px;
+}
+.card .facts-inline {
+  gap: 14px 22px;
+}
+.comparison {
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+  font-size: 12px;
+  line-height: 20px;
+}
+@media (max-width: 950px) {
+  .panes.session {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+    gap: 24px;
+  }
+  .session > .dapp {
+    padding: 24px;
+  }
+  .grid6 {
+    gap: 4px;
+  }
+  .cell .hole {
+    width: 40px;
+    height: 40px;
+  }
+}
+@media (max-width: 760px) {
+  .panes.session {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "wallet" "dapp";
+    gap: 28px;
+  }
+  .session > .dapp {
+    padding: 22px 18px;
+  }
+  .grid6 {
+    grid-template-columns: 12px repeat(6, minmax(40px, 1fr));
+    gap: 3px;
+  }
+  .cell {
+    min-width: 40px;
+  }
+  .cell .hole {
+    width: 40px;
+    height: 40px;
+  }
+  .cell[data-state="included"] .hole::after {
+    left: 15px;
+    top: 10px;
+  }
+  .sheet,
+  .card {
+    padding: 20px;
+  }
+}

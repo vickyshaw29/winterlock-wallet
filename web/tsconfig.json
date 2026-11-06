@@ -11,6 +11,7 @@
     "allowJs": true,
     "checkJs": false,
     "types": ["bun"],
+    "paths": { "@/*": ["./src/*"] },
 
     // Bundler mode
     "moduleResolution": "bundler",
@@ -30,5 +31,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["serve.ts", "test/**/*.ts"]
+  "include": ["serve.ts", "lan.ts", "dev.ts", "vite.config.ts", "test/**/*.ts"]
 }

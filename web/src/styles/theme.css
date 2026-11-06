@@ -1,0 +1,117 @@
+/* Winterlock's shared color, type and motion system. Written with Codex (OpenAI) for Vicky. */
+@font-face {
+  font-family: "Manrope";
+  src: url("fonts/manrope-latin.woff2") format("woff2");
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/ibm-plex-mono-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --ledger: #f4f6fb;
+  --stock: #ffffff;
+  --ink: #192238;
+  --print: #5e6b81;
+  --accent: #3859e8;
+  --on-accent: #ffffff;
+  --serial: #3859c7;
+  --stamp: #14765d;
+  --danger: #b52f4b;
+  --soft-accent: #eaf0ff;
+  --ticket: #f0f3ff;
+  --ticket-rule: #d1daf7;
+  --rule: #e0e5ef;
+  --rule-stock: #e8ecf3;
+  --rule-strong: #9ca9bf;
+  --rail: #ffffff;
+  --rail-active: #edf1ff;
+  --rail-ink: #192238;
+  --rail-muted: #606d83;
+  --rail-accent: #3859e8;
+  --vault: #edf2ff;
+  --vault-ink: #24366a;
+  --vault-muted: #536389;
+  --vault-rule: #a7b7de;
+  --hole: var(--ledger);
+  --blend: normal;
+  --sans: "Manrope", sans-serif;
+  --mono: "IBM Plex Mono", monospace;
+  --serif: var(--sans);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --press: 140ms var(--ease);
+  --roll: 200ms var(--ease);
+  --tear: 240ms var(--ease);
+  --stamp-land: 220ms var(--ease);
+  --rule-draw: 180ms var(--ease);
+  --rail-width: 0px;
+  --gutter: clamp(20px, 4.5vw, 72px);
+  --page: 1120px;
+  --inline: max(var(--gutter), calc((100% - var(--page)) / 2));
+  --surface-shadow: 0 4px 24px rgb(31 51 109 / 0.035);
+  --ticket-shadow: none;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --ledger: #101624;
+  --stock: #182033;
+  --ink: #edf1ff;
+  --print: #acb7ce;
+  --accent: #a8baff;
+  --on-accent: #14224d;
+  --serial: #b3c2ff;
+  --stamp: #8fddbe;
+  --danger: #ffa5ba;
+  --soft-accent: #263355;
+  --ticket: #1e2a47;
+  --ticket-rule: #405079;
+  --rule: #303b52;
+  --rule-stock: #29364b;
+  --rule-strong: #7587a9;
+  --rail: #151d2e;
+  --rail-active: #293654;
+  --rail-ink: #edf1ff;
+  --rail-muted: #acb7ce;
+  --rail-accent: #a8baff;
+  --vault: #202d49;
+  --vault-ink: #e2e9ff;
+  --vault-muted: #b0bedf;
+  --vault-rule: #5a6c94;
+  --surface-shadow: none;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --ledger: #101624;
+    --stock: #182033;
+    --ink: #edf1ff;
+    --print: #acb7ce;
+    --accent: #a8baff;
+    --on-accent: #14224d;
+    --serial: #b3c2ff;
+    --stamp: #8fddbe;
+    --danger: #ffa5ba;
+    --soft-accent: #263355;
+    --ticket: #1e2a47;
+    --ticket-rule: #405079;
+    --rule: #303b52;
+    --rule-stock: #29364b;
+    --rule-strong: #7587a9;
+    --rail: #151d2e;
+    --rail-active: #293654;
+    --rail-ink: #edf1ff;
+    --rail-muted: #acb7ce;
+    --rail-accent: #a8baff;
+    --vault: #202d49;
+    --vault-ink: #e2e9ff;
+    --vault-muted: #b0bedf;
+    --vault-rule: #5a6c94;
+    --surface-shadow: none;
+    color-scheme: dark;
+  }
+}
