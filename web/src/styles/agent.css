@@ -1,4 +1,4 @@
-/* One explicit trading rule, finite allowance and observed activity. Written with Codex (OpenAI) for Vicky. */
+/* One explicit trading rule, finite allowance and observed activity. */
 .agent-panes {
   grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
   gap: 28px;

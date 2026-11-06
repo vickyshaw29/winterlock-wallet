@@ -1,6 +1,5 @@
 {
   // Bun server/tests; React and shared domain helpers have separate strict configurations.
-  // Written with Claude Code and Codex (OpenAI) for Vicky.
   "compilerOptions": {
     // Environment setup & latest features
     "lib": ["ESNext"],

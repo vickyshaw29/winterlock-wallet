@@ -1,4 +1,4 @@
-/* A compact payment surface beside the cold device's authority. Written with Codex (OpenAI) for Vicky. */
+/* A compact payment surface beside the cold device's authority. */
 .instrument {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr);
   grid-template-areas: "phone cold";

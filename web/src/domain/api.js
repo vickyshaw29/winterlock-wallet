@@ -1,6 +1,5 @@
 // A client for every backend endpoint (spec, Shared interfaces 5, extended Nov 6), typed with JSDoc; a failed call
 // throws ApiError carrying the spec's {error, detail} shape and any extra fields (a 422 adds txHash, leaf, simulation).
-// Written with Claude Code (AI) for Vicky. Gas view types added with Codex (OpenAI) for Vicky.
 
 /**
  * @typedef {Object} WalletSummary GET /api/wallets

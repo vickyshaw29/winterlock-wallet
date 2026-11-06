@@ -1,5 +1,4 @@
 // The React app's server: compiled files from web/dist and the guarded /api/* proxy, on 127.0.0.1 only.
-// Written with Claude Code (AI) for Vicky; production-only frontend cleanup with Codex (OpenAI).
 //   bun serve.ts            (WL_BACKEND_URL, default http://127.0.0.1:8787; WL_WEB_PORT, default 5173)
 //   bun serve.ts --lan      also on this Mac's private network address, for a phone on YOUR OWN hotspot: every
 //                           request there needs the secret code in the printed link (then a cookie). See lan.ts.

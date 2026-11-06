@@ -1,5 +1,4 @@
 // Pure one-time-key state and ticket selection, shared by the React interface and tests.
-// Original logic written with Claude Code for Vicky; extracted with Codex (OpenAI).
 import { nonceKeyParts } from "./format.js";
 
 /** @import { TxRecord, WalletView } from "./api.js" */

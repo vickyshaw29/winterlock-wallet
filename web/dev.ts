@@ -1,4 +1,4 @@
-// Start the React/Vite development server on loopback. Written with Codex (OpenAI) for Vicky.
+// Start the React/Vite development server on loopback.
 import { createServer } from "vite";
 const server = await createServer();
 await server.listen();

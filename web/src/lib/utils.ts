@@ -1,4 +1,4 @@
-// Component class composition. Written with Codex (OpenAI) for Vicky.
+// Component class composition.
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 

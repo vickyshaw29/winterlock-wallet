@@ -1,5 +1,5 @@
 /* The Winterlock interface: a focused composer, visible authority and observable transaction progress.
-   Written with Codex (OpenAI) for Vicky. State and API behavior remain in the existing modules. */
+   State and API behavior remain in the existing modules. */
 @import "theme.css";
 *,
 *::before,

@@ -1,4 +1,4 @@
-// Vite/Tailwind build and a guarded same-origin development API. Written with Codex (OpenAI) for Vicky.
+// Vite/Tailwind build and a guarded same-origin development API.
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";

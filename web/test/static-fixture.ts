@@ -1,5 +1,4 @@
 // An isolated static-server fixture. Application behavior is covered against dist/ by Playwright.
-// Written with Codex (OpenAI), directed by Vicky.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

@@ -1,4 +1,4 @@
-/* Account selection and a deliberately short creation path. Written with Codex (OpenAI) for Vicky. */
+/* Account selection and a deliberately short creation path. */
 .panes.start {
   grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
   gap: 48px;

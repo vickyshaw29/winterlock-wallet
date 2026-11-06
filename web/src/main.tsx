@@ -1,4 +1,4 @@
-// Winterlock's React entry. Written with Codex (OpenAI), directed by Vicky.
+// Winterlock's React entry.
 import {
   Component,
   Suspense,
