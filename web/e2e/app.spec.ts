@@ -120,7 +120,8 @@ test("cold transfer and policy stay explicit, rotation waits for confirmation an
   page,
 }) => {
   await go(page);
-  await page.locator("#fold-transfer > summary").click();
+  await expect(page.locator("#fold-transfer")).toHaveJSProperty("open", true);
+  await expect(page.locator("#fold-cut")).toHaveJSProperty("open", false);
   await page
     .locator("#fold-transfer")
     .getByLabel("To", { exact: true })
