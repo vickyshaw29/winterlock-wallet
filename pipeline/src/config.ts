@@ -53,15 +53,26 @@ export const DEFAULTS = {
 } as const;
 
 /**
- * Verify-frame cost model for grinding: baseGas + gasPerStep x WOTS+ chain steps, for the bit-split verifier.
- * hashsig_verify on the devnet = 24,070 + 66.06 x steps (measure-verifier.ts, Nov 6). The account's own checks add
- * about 30,396 on a cold leaf (account 1's 53,828 minus its verifier's 23,432) and about 6,623 more on a hot leaf
- * (Day-0: 37,300 against 30,677). Plus a 600-gas margin. To be confirmed by account 2's first sends; a preflight
- * refuses any message the model gets wrong.
+ * Gas the account's EIP-1167 proxy spends before its DELEGATECALL: frame entry 100, a few pushes, the cold call 3,000
+ * (Day-0 notes). Only an estimate, and it barely matters: it shifts the usable gas by a few gas.
+ */
+export const PROXY_PRE_CALL = 3_124;
+/** Safety margin in GRIND's base gas, above the largest residual of the measured fit (252). */
+export const GRIND_MARGIN = 300;
+
+/**
+ * Verify-frame cost model for grinding: baseGas + gasPerStep x WOTS+ chain steps must fit what the declared limit can
+ * really use. Measured on account 2 (the bit-split verifier) by simulate-verify-gas.ts on Nov 6, from 8 real-signature
+ * simulations at 420 to 570 steps: 54,630 + 66.09 x steps, largest residual 252 gas; GRIND_MARGIN on top. The account
+ * is an EIP-1167 proxy whose DELEGATECALL passes on only 63/64 of the gas left (EIP-150), so 90,000 declared can use
+ * about 88,643: cold messages fit up to 510 chain steps, 66 % of messages. (The model before Nov 6, 55,100 with no
+ * holdback, allowed 525 steps, and a 525-step message runs out of gas behind the proxy: 89,356 used against 88,643.)
+ * A hot leaf adds about 6,623 for the policy reads: a Day-0 estimate, not yet measured on account 2. Hot messages then
+ * fit up to 409 steps, about 1 in 227. A preflight still refuses any message the model gets wrong.
  */
 export const GRIND = {
-  cold: { baseGas: 55_100, gasPerStep: 66.1 },
-  hot: { baseGas: 61_700, gasPerStep: 66.1 },
+  cold: { baseGas: 54_630 + GRIND_MARGIN, gasPerStep: 66.1, proxyPreCall: PROXY_PRE_CALL },
+  hot: { baseGas: 54_630 + 6_623 + GRIND_MARGIN, gasPerStep: 66.1, proxyPreCall: PROXY_PRE_CALL },
 } as const;
 
 export const explorerTxUrl = (hash: string) => `${DEVNET.explorer}/tx/${hash}`;

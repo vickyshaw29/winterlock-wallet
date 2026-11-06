@@ -9,12 +9,17 @@ import { computeSigHash } from "./codec/codec.ts";
 import type { FrameTransaction } from "./codec/FrameTx.ts";
 import { WOTS, wotsVerifySteps } from "./wots.ts";
 
-/** Verify-frame cost model: baseGas + gasPerStep x chain steps must stay within verifyGasLimit. */
+/** Verify-frame cost model: baseGas + gasPerStep x chain steps must stay within what verifyGasLimit can really use. */
 export interface GrindConfig {
   verifyGasLimit: bigint;
   /** the verify frame's cost without the chain work (account checks, key, proxy, the verifier's fixed part) */
   baseGas: number;
   gasPerStep: number;
+  /**
+   * Gas the account's EIP-1167 proxy spends before its DELEGATECALL. That call passes on only 63/64 of the gas left
+   * (EIP-150), so 1/64 of it is held back and never reaches the account's code. Omit when no proxy sits in front.
+   */
+  proxyPreCall?: number;
   maxTries?: number;
 }
 
@@ -29,7 +34,16 @@ export interface GrindResult<T> {
   tries: GrindTry<T>[];
 }
 
-export const maxStepsFor = (c: GrindConfig) => Math.floor((Number(c.verifyGasLimit) - c.baseGas) / c.gasPerStep);
+/**
+ * The most gas a verify frame declared with `limit` can use. Behind the proxy, 1/64 of what is left at the
+ * DELEGATECALL is held back: with 90,000 declared about 88,643 is usable (measured on account 2, Nov 6).
+ */
+export function usableVerifyGas(limit: bigint, proxyPreCall?: number): number {
+  const l = Number(limit);
+  return proxyPreCall === undefined ? l : l - Math.floor((l - proxyPreCall) / 64);
+}
+
+export const maxStepsFor = (c: GrindConfig) => Math.floor((usableVerifyGas(c.verifyGasLimit, c.proxyPreCall) - c.baseGas) / c.gasPerStep);
 
 /**
  * candidate(i) returns the i-th value of the free field and the transaction built with it (placeholders
@@ -41,8 +55,8 @@ export function grind<T>(candidate: (i: number) => { value: T; tx: FrameTransact
     throw new Error(`verify limit ${c.verifyGasLimit} leaves room for ${maxSteps} steps; even the best message needs ${WOTS.bestSteps}`);
   }
   const tries: GrindTry<T>[] = [];
-  // One try is one sig hash, well under a millisecond. Under the 90k limit a hot ticket needs about 71 on average;
-  // 4,096 tries leave a chance of about 1e-25 of no fit.
+  // One try is one sig hash, well under a millisecond. Under the 90k limit, behind the proxy, a hot ticket fits up to
+  // 409 chain steps: about 1 message in 227, so 4,096 tries leave a chance of about 1e-8 of no fit.
   const limit = c.maxTries ?? 4_096;
   for (let i = 0; i < limit; i++) {
     const { value, tx } = candidate(i);
