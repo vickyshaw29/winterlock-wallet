@@ -1,0 +1,20 @@
+{
+  "//": "Local fake devnet for the Winterlock pipeline: one Bun process answering the ethrex node's and the sidecar's JSON-RPC. Written with Claude Code (AI) for Vicky.",
+  "name": "@winterlock/fakechain",
+  "description": "Local FAKE devnet (not ethrex, not the sidecar) modelled on the Day-0 results and account/yul/Account.yul",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.1",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}
