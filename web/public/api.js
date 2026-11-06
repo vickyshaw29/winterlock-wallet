@@ -38,6 +38,17 @@
  * @property {string} allowedTarget
  * @property {Tickets} tickets
  * @property {boolean} rotationPending
+ * @property {Leaves} [leaves] the current epoch's leaves by state, for the key register (spec, Nov 6)
+ */
+
+/**
+ * @typedef {Object} Leaves GET /api/wallets/:address's leaves (spec, Shared interfaces 5, Nov 6): leaf numbers by state,
+ *   from the cold journal and the ticket device's journal. A ticket in none of the lists is still on the phone; any
+ *   other leaf in none of them is unused.
+ * @property {number[]} onChain keys the chain consumed
+ * @property {number[]} burned burned by the signer: expired, refused, an estimate, never sent
+ * @property {number[]} inFlight reserved or submitted, not decided
+ * @property {{ from: number, to: number } | null} tickets the band cut to the ticket device, to inclusive
  */
 
 /**

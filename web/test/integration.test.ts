@@ -110,6 +110,7 @@ describe("pages and wallets", () => {
       leavesUsed: 0, leafCount: 32, lanesInFlight: 0, hybrid: false, locked: false, balanceWei: "20000000000000000",
       hotStart: 16, hotValueCapWei: "10000000000000000", hotFeeCapWei: "2000000000000000", allowedTarget: TARGET,
       tickets: { exported: 0, used: 0, left: 0 }, rotationPending: false,
+      leaves: { onChain: [], burned: [], inFlight: [], tickets: null },
     });
     expect(flows.uncutHotLeaves(w)).toBe(16);
     expect(await api.txs(created.address)).toEqual([]);
@@ -291,6 +292,28 @@ describe("agent", () => {
     expect(rows.map((r) => r.leaf).sort()).toEqual([16, 17]); // each burned its own ticket
     expect(h.chain.sent).toHaveLength(0); // refused in the dry run: nothing reached a mempool
     expect((await api.wallet(a)).tickets).toEqual({ exported: 3, used: 2, left: 1 });
+  });
+
+  test("the allowance's stub strip from the real view: the tranches used on chain, the compromised tickets burned, and the next ticket is the one the device signs next", async () => {
+    const { allowanceCount } = await import("../public/agent.js");
+    const { leafStates, nextTicket, stubsOf } = await import("../public/register.js");
+    const a = await wallet();
+    h.chain.credit(a, 1n * ETH);
+    await flows.cutTickets(api, a, 8);
+    let w = await api.wallet(a);
+    await flows.fireTranches(api, w, { tranche: flows.trancheWei(w)!, mempool: "alt" });
+    await flows.compromisedPayments(api, w, "alt");
+    await board(a, (rs) => rs.length === 6 && rs.filter((r) => r.status.key === "included").length === 4);
+    w = await api.wallet(a);
+    const states = leafStates(w, await api.txs(a));
+    expect(stubsOf(w, states).map((s) => [s.leaf, s.state, s.next])).toEqual([
+      [16, "onchain", false], [17, "onchain", false], [18, "onchain", false], [19, "onchain", false],
+      [20, "burned", false], [21, "burned", false], [22, "phone", true], [23, "phone", false],
+    ]);
+    expect(allowanceCount(w, false)).toEqual({ n: "2", of: " of 8", note: "tickets left of those cut; 6 used or burned" });
+    // the serial the screen shows as next is the real one: the ticket device signs exactly that leaf
+    const next = await flows.send(api, a, flows.payBody({ wallet: w, valueWei: 1000n, mempool: "alt" }));
+    expect(next.leaf).toBe(nextTicket(w, states)!);
   });
 });
 

@@ -1,16 +1,16 @@
 <!doctype html>
 <!-- Agent screen (spec, AI agent reacting to the market): a mock price, the rule that fires four tranches on four lanes,
-     the allowance card, and the compromised-server refusal. Written with Claude Code (AI) for Vicky. -->
+     the allowance card, and the compromised-server refusal. Written with Claude Code (AI) for Vicky.
+     Ledger direction (1-ledger.md): three columns of one sheet, no perforation between them; the agent's tickets are a stub strip. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent · Winterlock</title>
+<meta name="color-scheme" content="light dark">
+<title>Agent, Winterlock</title>
 <link rel="icon" href="data:,">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="agent.css">
 <script type="module" src="agent.js"></script>
 </head>
 <body>
@@ -29,10 +29,10 @@
 
 <main>
   <fieldset data-sends class="scene" id="scene-fields">
-    <button class="btn primary" type="button" id="play">Play scene</button>
+    <button class="btn" type="button" id="play">Play scene</button>
     <p class="hint">Cuts tickets if the agent has fewer than 6; the mock price falls and the rule fires four tranches at once as parallel lanes on the alt mempool; then the server is compromised and sends two payments outside the hot policy.</p>
   </fieldset>
-  <div class="panes">
+  <div class="panes agent-panes">
     <section class="pane market" aria-labelledby="market-title">
       <div class="pane-head">
         <h2 id="market-title">Market</h2>
@@ -40,17 +40,20 @@
       </div>
       <div class="group">
         <p class="hint">Mock ETH price</p>
-        <div class="price-line">
-          <span class="big" id="price">—</span>
-          <span class="mono" id="change">—</span>
-        </div>
+        <p class="price-line">
+          <span class="price" id="price">—</span>
+          <span class="change" id="change">—</span>
+        </p>
         <svg class="sparkline" id="spark" role="img" tabindex="0" aria-describedby="spark-readout"></svg>
-        <p class="hint mono" id="spark-readout">Hover or focus the line to read a price; the last 30 s are in the accent.</p>
+        <p class="hint num" id="spark-readout">Hover or focus the line to read a price.</p>
       </div>
-      <p class="rule-text" id="rule-text">If price falls more than 2 % in 30 s, buy in 4 tranches.</p>
+      <div class="rule-box">
+        <p class="rule-label">Agent rule</p>
+        <p class="rule-text" id="rule-text">If price falls more than 2 % in 30 s, buy in 4 tranches.</p>
+      </div>
       <fieldset data-sends id="agent-fields">
+        <label class="toggle"><input type="checkbox" id="armed"> Rule armed</label>
         <div class="row">
-          <label class="toggle"><input type="checkbox" id="armed"> Rule armed</label>
           <button class="btn" type="button" id="drop">Drop the mock price 3 %</button>
           <button class="btn primary" type="button" id="fire">Fire now</button>
         </div>
@@ -59,18 +62,26 @@
       </fieldset>
     </section>
 
-    <section class="pane" aria-labelledby="allowance-title">
+    <section class="pane allowance" aria-labelledby="allowance-title">
       <div class="pane-head">
         <h2 id="allowance-title">Allowance</h2>
         <p>the agent's hot tickets</p>
       </div>
-      <dl class="facts-inline" id="allowance"></dl>
-      <p class="warning" id="device-issue" role="status" hidden></p>
-      <p class="mono" id="max-loss"></p>
-      <p class="set-aside" id="agent-set-aside"></p>
       <div class="group">
+        <p class="count" id="agent-count"><span class="roll" id="agent-count-n">0</span><span id="agent-count-of"> of 0</span></p>
+        <p class="hint" id="agent-count-note"></p>
+        <p class="warning" id="device-issue" role="status" hidden></p>
+        <ol class="stubs" id="stubs" aria-label="The agent's tickets" hidden></ol>
+      </div>
+      <dl class="facts-inline" id="allowance"></dl>
+      <div class="total" id="max-loss">
+        <p class="total-line"><span class="total-label">Max loss</span> <span class="total-fig num" id="max-loss-fig">—</span></p>
+        <p class="hint" id="max-loss-note"></p>
+      </div>
+      <p class="set-aside" id="agent-set-aside"></p>
+      <div class="group expiry">
+        <p class="expires"><span class="hint">Expires in</span> <span class="num">—</span></p>
         <div class="row">
-          <span class="hint">Expires in</span><span class="mono">—</span>
           <button class="btn" type="button" disabled>Renew from cold device</button>
           <button class="btn" type="button" disabled>Stop renewing</button>
         </div>
@@ -84,9 +95,10 @@
       </fieldset>
     </section>
 
-    <section class="pane" aria-labelledby="log-title">
+    <section class="pane daybook" aria-labelledby="log-title">
       <div class="pane-head"><h2 id="log-title">Event log</h2><p>trigger, lanes, inclusions</p></div>
       <ol class="log" id="log" aria-live="polite"></ol>
+      <p class="hint" id="log-empty">No entries yet. Fire, or arm the rule and drop the mock price.</p>
     </section>
   </div>
 
@@ -102,8 +114,8 @@
       </div>
     </div>
     <p id="set-aside" class="set-aside"></p>
-    <p id="lane-limits" class="lane-limits"></p>
     <div id="lanes"></div>
+    <p id="lane-limits" class="lane-limits"></p>
   </section>
 </main>
 

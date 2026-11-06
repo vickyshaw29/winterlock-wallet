@@ -104,6 +104,23 @@ describe("static files", () => {
     expect(CSP).toContain("connect-src 'self'"); // a page can only talk to this server
   });
 
+  test("the self-hosted fonts as font/woff2; the CSP takes fonts and styles from this origin only, no third-party host", async () => {
+    const { req } = harness();
+    for (const p of ["/fonts/archivo-latin.woff2", "/fonts/besley-latin.woff2"]) {
+      const res = await req(p);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      expect([p, res.status, res.headers.get("content-type"), res.headers.get("x-content-type-options")]).toEqual([p, 200, "font/woff2", "nosniff"]);
+      expect([p, new TextDecoder().decode(bytes.slice(0, 4))]).toEqual([p, "wOF2"]); // a real woff2 file, not an error page
+      expect(res.headers.get("content-security-policy")).toBeNull(); // the CSP goes on pages
+    }
+    const parts = CSP.split("; ");
+    expect(parts).toContain("font-src 'self'");
+    expect(parts).toContain("style-src 'self'");
+    expect(CSP).not.toMatch(/https?:|googleapis|gstatic|unsafe-inline/);
+    const page = await req("/hot-cold.html");
+    expect(page.headers.get("content-security-policy")).toBe(CSP);
+  });
+
   test("nothing outside web/public, and only page, script, style and image types inside it", async () => {
     const { req } = harness();
     for (const p of ["/../serve.ts", "/%2e%2e/serve.ts", "/..%2fserve.ts", "/%2e%2e%2f%2e%2e%2fbackend/src/app.ts", "/tsconfig.json", "/nope.html", "/public/index.html", "/index.html%00.js", "/%E0%A4%A"]) {

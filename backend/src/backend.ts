@@ -929,6 +929,7 @@ export class Backend {
       hotStart: v.hotStart, hotValueCapWei: v.hotValueCap.toString(), hotFeeCapWei: v.hotFeeCap.toString(), allowedTarget: v.allowedTarget,
       tickets: device?.counts() ?? (lost ? { exported: lost.count, used: 0, left: 0, unjournaled: lost.count } : { exported: 0, used: 0, left: 0 }),
       rotationPending: this.rt(w).rotating || !!w.record.rotation,
+      leaves: leafStates(cold, device),
     };
   }
 
@@ -1380,6 +1381,34 @@ function maxCostOf(sim: SimulationResult | null | undefined, wire: unknown): str
     try { return laneCost(fromWire(wire as Parameters<typeof fromWire>[0])).gasCostWei.toString(); } catch { /* not a transaction */ }
   }
   return null;
+}
+
+/**
+ * The wallet view's `leaves` (spec, Shared interfaces 5, Nov 6), read-only, for the screens' key register: the current
+ * epoch's leaves by state. Cold leaves come from the cold journal; a ticket's state from the device's own journal,
+ * which alone knows which tickets signed. A ticket in none of the three lists is still on the phone; any other leaf in
+ * none of them is unused. An exported leaf that no ticket file holds (a cut whose CLI failed) is burned: it is never
+ * handed out. With the device journal lost, the cut is what the cold journal marked exported, its use unknown.
+ */
+export function leafStates(cold: LeafJournal, device: TicketDevice | null) {
+  const onChain: number[] = [], burned: number[] = [], inFlight: number[] = [];
+  const band = device?.band() ?? null; // [from, to)
+  const put = (r: LeafRecord) => {
+    if (r.status === "onchain") onChain.push(r.leaf);
+    else if (r.status === "burned") burned.push(r.leaf);
+    else if (r.status === "reserved" || r.status === "submitted") inFlight.push(r.leaf);
+  };
+  const exported: number[] = [];
+  for (const r of cold.all()) {
+    if (r.status !== "exported") put(r);
+    else if (!device) exported.push(r.leaf); // the device journal is lost: cut, use unknown
+    else if (!band || r.leaf < band.from || r.leaf >= band.to) burned.push(r.leaf); // no ticket file holds it
+  }
+  for (const r of device?.journal.all() ?? []) put(r);
+  const tickets = band ? { from: band.from, to: band.to - 1 }
+    : exported.length ? { from: Math.min(...exported), to: Math.max(...exported) } : null;
+  const up = (a: number[]) => a.sort((x, y) => x - y);
+  return { onChain: up(onChain), burned: up(burned), inFlight: up(inFlight), tickets };
 }
 
 /** The receipt from the node, else from the sidecar; null while none can be read. */

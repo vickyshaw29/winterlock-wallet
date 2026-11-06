@@ -172,6 +172,8 @@ describe("cutting tickets (I3, I4)", () => {
       expect(again.body.detail).toContain(`recover ${journal}; a new journal would re-sign used tickets`);
       expect(again.body.detail).not.toContain("cut some");
       expect((await h.req("GET", `/wallets/${a}`)).body.tickets).toEqual({ exported: 3, used: 0, left: 0, unjournaled: 3 });
+      // the register's leaves: the cut is what the cold journal marked exported; which ticket signed is unknown
+      expect((await h.req("GET", `/wallets/${a}`)).body.leaves).toEqual({ onChain: [], burned: [], inFlight: [], tickets: { from: 12, to: 14 } });
       expect(h.logs.some((l) => l.startsWith("start: 3 ticket(s) of epoch 0 were cut"))).toBe(true);
       // with the files gone too, the cold journal still knows the cut
       fs.rmSync(ticketsDir(), { recursive: true });
@@ -181,6 +183,28 @@ describe("cutting tickets (I3, I4)", () => {
     } finally {
       node.simulate = realSimulate;
     }
+  });
+});
+
+describe("the wallet view's leaves (spec, Shared interfaces 5, Nov 6)", () => {
+  test("every leaf of the epoch by state, from both journals: a ticket's from the device's, an estimate's leaf burned", async () => {
+    const leaves = async () => (await h.req("GET", `/wallets/${a}`)).body.leaves;
+    expect(await leaves()).toEqual({ onChain: [], burned: [], inFlight: [], tickets: null });
+    await cut(3); // tickets 12 to 14
+    expect(await leaves()).toEqual({ onChain: [], burned: [], inFlight: [], tickets: { from: 12, to: 14 } });
+    const paid = await hot({ to: TARGET, valueWei: "1000" }); // ticket 12
+    await h.settle(paid.body.txHash);
+    expect((await hot({ to: OTHER, valueWei: "1" })).status).toBe(422); // ticket 13, refused: burned by the signer
+    const keyed = await h.req("POST", `/wallets/${a}/send`, { to: TARGET, valueWei: "1" }); // cold leaf 1
+    await h.settle(keyed.body.txHash);
+    // an admin call: cold leaf 2 signs only its estimate (burned, with no transaction record), leaf 3 signs the call
+    const policy = await h.req("POST", `/wallets/${a}/hot-policy`, { hotStart: 12, valueCapWei: "10000000000000000", feeCapWei: "2000000000000000", allowedTarget: TARGET });
+    expect(policy.status).toBe(200);
+    await h.settle(policy.body.txHash);
+    expect(await leaves()).toEqual({ onChain: [1, 3, 12], burned: [2, 13], inFlight: [], tickets: { from: 12, to: 14 } });
+    // ticket 14 is in no list: still on the phone. The transaction records alone never name leaf 2.
+    const recorded = (await h.req("GET", `/wallets/${a}/txs`)).body.map((t: { leaf: number }) => t.leaf);
+    expect(recorded.sort((x: number, y: number) => x - y)).toEqual([1, 3, 12, 13]);
   });
 });
 

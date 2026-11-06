@@ -95,6 +95,15 @@ export function formatGas(gas) {
 }
 
 /**
+ * A whole number with thousands separators ("408,215"): block numbers, leaf counts. "—" when unknown.
+ * @param {unknown} n
+ */
+export function formatCount(n) {
+  const v = toBigInt(n);
+  return v === null ? "—" : `${v < 0n ? "-" : ""}${group(v < 0n ? -v : v)}`;
+}
+
+/**
  * "0x1234…cdef" for a hash or an address; short values come back whole.
  * @param {string | null | undefined} hex
  * @param {number} [head] characters kept after 0x
