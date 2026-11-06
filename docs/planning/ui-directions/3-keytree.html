@@ -1,0 +1,758 @@
+<!doctype html>
+<!-- Direction 3, the key tree: a static mock of the hot-and-cold screen. Nothing is wired to an API; Pay and
+     Simulate stuck payment play the one orchestrated moment on simulated lanes. Written with Claude Code (AI) for Vicky. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Winterlock key tree</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B612:ital,wght@0,400;0,700;1,400&amp;family=B612+Mono:wght@400;700&amp;family=STIX+Two+Text:ital,wght@0,400..700;1,400..700&amp;display=swap">
+<style>
+:root {
+  --frost: #EEF3F5;        /* ground */
+  --ink: #000000;          /* text; a leaf the chain burned */
+  --slate: #3C5566;        /* secondary text, a tint of the ground's hue */
+  --prussian: #0A4D8C;     /* in flight, and the primary action */
+  --on-prussian: #FFFFFF;
+  --sodium: #F2B807;       /* the hot band and its tickets */
+  --on-sodium: #000000;
+  --line: #9FB0B9;         /* hairlines */
+  --line-strong: #6B818D;  /* inputs, cell outlines */
+  --serif: "STIX Two Text", "STIX Two", Cambria, Georgia, serif;
+  --sans: "B612", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "B612 Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --u: 8px;
+  --r: 2px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --frost: #0B1E33; --ink: #EAF1F6; --slate: #A9C1D6; --prussian: #86BBF2; --on-prussian: #0B1E33;
+    --sodium: #F2B807; --on-sodium: #0B1E33; --line: #3A5874; --line-strong: #5F7E9B; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --frost: #0B1E33; --ink: #EAF1F6; --slate: #A9C1D6; --prussian: #86BBF2; --on-prussian: #0B1E33;
+  --sodium: #F2B807; --on-sodium: #0B1E33; --line: #3A5874; --line-strong: #5F7E9B; color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--frost); color: var(--ink); font: 14px/22px var(--sans); font-variant-numeric: tabular-nums lining-nums; }
+h1, h2, h3, p, dl, dd, figure, ol, ul { margin: 0; }
+h2, h3 { font-family: var(--serif); font-weight: 600; }
+h2 { font-size: 21px; line-height: 28px; }
+h3 { font-size: 16px; line-height: 24px; }
+a { color: var(--prussian); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--prussian); outline-offset: 2px; }
+.hex { font-family: var(--mono); font-size: 13px; letter-spacing: 0; }
+.var { font-family: var(--serif); font-style: italic; }
+.hint { font: 15px/24px var(--serif); color: var(--slate); max-width: 68ch; }
+.small { font-size: 12px; line-height: 18px; color: var(--slate); }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ------------------------------------------------------------ frame */
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--u) calc(4 * var(--u)); padding: calc(2 * var(--u)) clamp(16px, 4vw, 48px) var(--u); border-bottom: 1px solid var(--line); }
+.brand { font: 600 21px/28px var(--serif); color: var(--ink); text-decoration: none; }
+.screens { display: flex; flex-wrap: wrap; gap: calc(3 * var(--u)); }
+.screens a { color: var(--slate); text-decoration: none; padding-bottom: 4px; border-bottom: 2px solid transparent; }
+.screens a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+.screens a:hover { color: var(--ink); }
+.wrap { max-width: 1360px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px); }
+.banner { background: var(--ink); color: var(--frost); padding: var(--u) calc(2 * var(--u)); margin-top: calc(2 * var(--u)); }
+.banner[hidden] { display: none; }
+
+.wallet-head { display: flex; flex-wrap: wrap; gap: calc(2 * var(--u)) calc(5 * var(--u)); padding-top: calc(3 * var(--u)); }
+.kv dt { font-size: 12px; line-height: 16px; color: var(--slate); }
+.kv dd { font: 400 21px/28px var(--serif); }
+.kv dd.hex { font: 400 15px/28px var(--mono); }
+.kv dd .of { color: var(--slate); }
+.notice { display: flex; gap: var(--u); align-items: baseline; min-height: 32px; padding-top: calc(1.5 * var(--u)); font: 16px/24px var(--serif); overflow-wrap: anywhere; }
+.notice .when { font: 12px/24px var(--sans); color: var(--slate); flex: none; }
+.scene { display: flex; flex-wrap: wrap; gap: var(--u) calc(3 * var(--u)); align-items: flex-start; padding: calc(2 * var(--u)) 0 calc(3 * var(--u)); border-bottom: 1px solid var(--line); }
+.scene .hint { flex: 1 1 320px; font-size: 14px; line-height: 22px; }
+
+/* ------------------------------------------------------------ controls */
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: calc(3 * var(--u)); }
+.group { display: grid; gap: var(--u); padding-top: calc(3 * var(--u)); border-top: 1px solid var(--line); }
+.row { display: flex; flex-wrap: wrap; gap: var(--u); align-items: flex-end; }
+.row > .field { flex: 1 1 120px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span:first-child { font-size: 12px; line-height: 16px; color: var(--slate); }
+input[type="text"], input[type="number"] {
+  width: 100%; min-width: 0; height: 36px; padding: 0 var(--u); border: 1px solid var(--line-strong); border-radius: var(--r);
+  background: transparent; color: var(--ink); font: 14px/1 var(--sans); font-variant-numeric: tabular-nums;
+}
+input.hex { font: 13px/1 var(--mono); }
+input[readonly] { border-style: dashed; color: var(--slate); }
+input[aria-invalid="true"] { border: 2px solid var(--ink); }
+.problem { font-size: 12px; line-height: 18px; font-weight: 700; }
+.problem[hidden] { display: none; }
+.btn { height: 36px; padding: 0 calc(2 * var(--u)); border: 1px solid var(--ink); border-radius: var(--r); background: transparent; color: var(--ink); font: 700 13px/1 var(--sans); cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--prussian); border-color: var(--prussian); color: var(--on-prussian); }
+.btn.armed { background: var(--ink); color: var(--frost); }
+.btn:disabled { cursor: not-allowed; opacity: .45; }
+.toggle { display: inline-flex; gap: var(--u); align-items: center; cursor: pointer; }
+.toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--prussian); }
+.warning { padding-left: calc(1.5 * var(--u)); border-left: 2px solid var(--ink); font: 15px/22px var(--serif); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px calc(2 * var(--u)); font-size: 13px; }
+.facts dt { color: var(--slate); }
+
+/* ------------------------------------------------------------ the sheet: cold annotation, plate, phone annotation */
+.sheet { display: grid; gap: calc(6 * var(--u)) clamp(32px, 4vw, 56px); padding: calc(4 * var(--u)) 0; grid-template-columns: minmax(0, 1fr); grid-template-areas: "plate" "phone" "cold"; }
+.note { min-width: 0; display: grid; gap: calc(3 * var(--u)); align-content: start; position: relative; }
+.note-head { display: flex; flex-wrap: wrap; gap: var(--u) calc(2 * var(--u)); align-items: baseline; justify-content: space-between; position: relative; }
+.note-head h2 { position: relative; }
+.note-head p { width: 100%; }
+#cold-pane { grid-area: cold; }
+#phone-pane { grid-area: phone; }
+.plate { grid-area: plate; min-width: 0; display: grid; gap: calc(2 * var(--u)); align-content: start; justify-self: center; width: min(100%, 560px); }
+/* the band marker a pane carries on narrow screens, the same mark as the band it annotates */
+.band-mark { flex: 0 0 100%; height: 6px; }
+.band-mark::before { content: ""; display: block; width: 48px; height: 6px; }
+#phone-pane .band-mark::before { background: var(--sodium); }
+#cold-pane .band-mark::before { box-shadow: inset 0 0 0 1px var(--line-strong); }
+#cold-pane.offline fieldset { opacity: .38; }
+#cold-pane.offline .note-head::after { border-top-style: dashed; }
+
+@media (min-width: 760px) {
+  .sheet { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "plate plate" "phone cold"; }
+}
+@media (min-width: 1140px) {
+  .sheet { grid-template-columns: minmax(250px, 1fr) minmax(420px, 560px) minmax(250px, 1fr); grid-template-areas: "cold plate phone"; }
+  .band-mark { display: none; }
+  /* leaders: a hairline from each annotation's heading across the gutter to its band */
+  .note-head::after { content: ""; position: absolute; top: 14px; border-top: 1px solid var(--ink); }
+  #cold-pane .note-head::after { left: calc(100% + 8px); width: var(--lead-cold, 40px); }
+  #phone-pane .note-head::after { right: calc(100% + 8px); width: var(--lead-hot, 40px); }
+  #phone-pane { margin-top: var(--phone-drop, 0px); }
+}
+</style>
+<style>
+/* ------------------------------------------------------------ the plate: 1,024 leaves, column by column */
+.plate-caption h2 { font-size: 28px; line-height: 36px; font-weight: 500; }
+.plate-caption p { font: 16px/26px var(--serif); color: var(--slate); max-width: 60ch; margin-top: 4px; }
+.figure { display: grid; grid-template-columns: auto minmax(0, 1fr) 84px; grid-template-rows: auto auto auto; column-gap: 6px; }
+.ticks-x { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 0 var(--gap); font: 11px/16px var(--serif); color: var(--slate); margin-bottom: 2px; }
+.ticks-x span { white-space: nowrap; }
+.ticks-y { grid-column: 1; grid-row: 2; display: grid; grid-template-rows: repeat(32, minmax(0, 1fr)); gap: var(--gap) 0; font: 11px/1 var(--serif); color: var(--slate); text-align: right; }
+.ticks-y span { display: flex; align-items: center; justify-content: flex-end; }
+.leaves { --gap: 2px; grid-column: 2; grid-row: 2; display: grid; grid-auto-flow: column; grid-template-rows: repeat(32, auto); grid-template-columns: repeat(32, minmax(0, 1fr)); gap: var(--gap); cursor: crosshair; }
+.ticks-x, .ticks-y { --gap: 2px; }
+@media (max-width: 520px) { .leaves, .ticks-x, .ticks-y { --gap: 1px; } .figure { grid-template-columns: auto minmax(0, 1fr) 12px; } .bracket { font-size: 0; padding: 0; } .bracket b { display: none; } }
+.leaves:focus-visible { outline-offset: 4px; }
+
+/* one leaf; the same marks are used by .mk in the board, the readout and the phone */
+.leaf, .mk { position: relative; aspect-ratio: 1; box-shadow: inset 0 0 0 1px var(--line); }
+.mk { display: inline-block; width: 11px; height: 11px; flex: none; vertical-align: -1px; }
+.leaf.hot, .mk.hot { background: var(--sodium); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-sodium) 30%, var(--sodium)); }
+.leaf.cut, .mk.cut { box-shadow: inset 0 0 0 1px var(--on-sodium); }
+.leaf.cut::after, .mk.cut::after { content: ""; position: absolute; inset: 3px 50% 3px auto; border-left: 1px dashed var(--on-sodium); }
+.leaf.burn, .mk.burn { background: var(--ink); box-shadow: none; }
+.leaf.burn.hot { box-shadow: 0 0 0 1px var(--sodium); }
+.leaf.jour, .mk.jour { background: repeating-linear-gradient(135deg, var(--ink) 0 1.4px, transparent 1.4px 3.6px); box-shadow: inset 0 0 0 1px var(--ink); }
+.leaf.jour.hot, .mk.jour.hot { background-color: var(--sodium); }
+.leaf.flight, .mk.flight { box-shadow: inset 0 0 0 2px var(--prussian); background: transparent; }
+.leaf.flight.hot, .mk.flight.hot { background: var(--sodium); box-shadow: inset 0 0 0 2px var(--prussian), 0 0 0 1px var(--prussian); }
+.leaf.void, .mk.void { background: linear-gradient(to top right, transparent calc(50% - .7px), var(--slate) calc(50% - .7px) calc(50% + .7px), transparent calc(50% + .7px)); }
+.leaf.sel { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 1; }
+
+/* the hot band's bracket in the right gutter: rows 16 to 31 of the last column */
+.gutter { grid-column: 3; grid-row: 2; position: relative; }
+.bracket { position: absolute; left: 2px; right: 0; top: calc(50% + 1px); bottom: 0; border-left: 2px solid var(--sodium); padding-left: 6px; display: flex; flex-direction: column; justify-content: center; font: 12px/16px var(--serif); }
+.bracket b { font: 700 12px/16px var(--sans); }
+.under { grid-column: 2; grid-row: 3; margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--line-strong); width: calc(100% - 100% / 32); font: 13px/20px var(--serif); color: var(--slate); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px calc(2.5 * var(--u)); font-size: 12px; line-height: 18px; }
+.legend li { display: inline-flex; gap: 6px; align-items: center; }
+.legend, .steps, .stubs, .path { list-style: none; padding: 0; }
+
+/* readout of the selected leaf */
+.readout { display: grid; gap: calc(1.5 * var(--u)); padding-top: calc(2 * var(--u)); border-top: 1px solid var(--line); }
+.readout-title { font: 400 21px/28px var(--serif); }
+.readout-title .mk { width: 14px; height: 14px; margin-right: 8px; vertical-align: -1px; }
+.formula { font: 16px/24px var(--serif); }
+.sig { display: grid; gap: 6px; }
+.chains { display: grid; grid-template-columns: repeat(64, minmax(0, 1fr)) 6px repeat(3, minmax(0, 1fr)); gap: 1px; height: 64px; align-items: end; }
+.chain { display: grid; grid-template-rows: repeat(16, minmax(0, 1fr)); gap: 0; height: 100%; box-shadow: inset 0 0 0 .5px var(--line); }
+.chain i { display: block; }
+.chain i.on { background: var(--ink); }
+.chain i.rev { background: var(--prussian); }
+.chains .gap { height: 100%; }
+.path { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; font-size: 12px; color: var(--slate); }
+.path li { width: 14px; height: 14px; box-shadow: inset 0 0 0 1px var(--line-strong); font: 9px/14px var(--sans); text-align: center; color: var(--slate); }
+.path li.r { background: var(--ink); color: var(--frost); box-shadow: none; }
+.path li.slot { box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 -3px 0 var(--line); }
+
+/* ------------------------------------------------------------ the phone's tickets */
+.counter { display: flex; align-items: baseline; gap: var(--u); }
+.counter .big { font: 500 44px/48px var(--serif); }
+.counter .of { font: 21px/28px var(--serif); color: var(--slate); }
+.stubs { display: flex; flex-wrap: wrap; gap: 4px; }
+.stub { position: relative; display: grid; place-items: center; width: 44px; height: 30px; font: 700 11px/1 var(--sans); background: var(--sodium); color: var(--on-sodium); border-radius: 1px; }
+.stub::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 0; border-left: 2px dotted var(--frost); }
+.stub.gone { background: transparent; color: var(--slate); box-shadow: inset 0 0 0 1px var(--line); }
+.stub.gone::before { border-left: 1px dashed var(--line-strong); }
+.stub .mk { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; }
+.set-aside { font-size: 12px; line-height: 18px; color: var(--slate); }
+
+/* ------------------------------------------------------------ the lane board */
+.board { display: grid; gap: var(--u); padding: calc(4 * var(--u)) 0; border-top: 2px solid var(--ink); }
+.board.public { border-top-width: 4px; }
+.board-head { display: flex; flex-wrap: wrap; gap: var(--u) calc(3 * var(--u)); align-items: center; justify-content: space-between; }
+.board-head h2 { font-size: 28px; line-height: 36px; font-weight: 500; }
+.controls { display: flex; gap: var(--u); align-items: center; font-size: 13px; color: var(--slate); }
+.segmented { display: inline-flex; border: 1px solid var(--ink); border-radius: var(--r); }
+.segmented label { position: relative; }
+.segmented input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.segmented span { display: block; padding: 6px 14px; font: 700 13px/20px var(--sans); color: var(--ink); }
+.segmented label + label span { border-left: 1px solid var(--ink); }
+.segmented input:checked + span { background: var(--ink); color: var(--frost); }
+.segmented input:focus-visible + span { outline: 2px solid var(--prussian); outline-offset: 2px; }
+.lane-limits { font: 14px/22px var(--serif); color: var(--slate); max-width: 96ch; }
+.table-wrap { overflow-x: auto; margin-top: var(--u); }
+table.lanes { width: 100%; border-collapse: collapse; }
+.lanes th { text-align: left; font: 400 12px/16px var(--sans); color: var(--slate); padding: 0 var(--u) var(--u); border-bottom: 1px solid var(--ink); white-space: nowrap; }
+.lanes td { padding: calc(1.5 * var(--u)) var(--u); border-bottom: 1px solid var(--line); vertical-align: top; }
+.lanes .num { text-align: right; white-space: nowrap; }
+.lanes th.num { text-align: right; }
+.lane-row { cursor: pointer; }
+.lane-row:hover td { background: color-mix(in srgb, var(--line) 18%, transparent); }
+.lane-row[aria-expanded="true"] td { background: color-mix(in srgb, var(--prussian) 8%, transparent); }
+.leafcell { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.chip { font: 700 11px/16px var(--sans); padding: 0 5px; background: var(--sodium); color: var(--on-sodium); border-radius: 1px; }
+.chip.cold { background: transparent; color: var(--slate); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.lane-row.gone .num { color: var(--slate); text-decoration: line-through; text-decoration-thickness: 1px; }
+.steps { display: flex; flex-wrap: wrap; gap: 4px calc(2 * var(--u)); font-size: 13px; }
+.step { display: inline-flex; gap: 6px; align-items: center; color: var(--slate); }
+.step.now { color: var(--ink); font-weight: 700; }
+.step .when { font-weight: 400; font-size: 11px; color: var(--slate); }
+.why { display: block; margin-top: 4px; font: 14px/20px var(--serif); }
+.why .hex { font-size: 11px; color: var(--slate); }
+.detail-row td { padding: calc(2 * var(--u)) var(--u) calc(3 * var(--u)); background: color-mix(in srgb, var(--prussian) 5%, transparent); }
+.detail { display: grid; gap: calc(2 * var(--u)); grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); font: 14px/22px var(--serif); }
+.detail h3 { font-size: 14px; line-height: 20px; margin-bottom: 4px; }
+.checks { list-style: none; padding: 0; display: grid; gap: 2px; }
+.checks b { font: 700 12px/20px var(--sans); display: inline-block; min-width: 34px; }
+
+.status-line { display: flex; flex-wrap: wrap; gap: var(--u) calc(3 * var(--u)); justify-content: space-between; padding: calc(1.5 * var(--u)) clamp(16px, 4vw, 48px); border-top: 1px solid var(--line); font-size: 12px; color: var(--slate); }
+.status-line .parts { display: flex; flex-wrap: wrap; gap: 4px calc(3 * var(--u)); }
+
+@media (max-width: 680px) {
+  table.lanes thead { display: none; }
+  table.lanes, .lanes tbody, .lanes .detail-row, .lanes .detail-row td { display: block; }
+  .lanes tr.lane-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px var(--u); padding: calc(1.5 * var(--u)) 0; border-bottom: 1px solid var(--line); }
+  .lanes tr.lane-row > td { border: 0; padding: 0; min-width: 0; }
+  .lanes tr.lane-row > td::before { content: attr(data-label); display: block; font: 11px/16px var(--sans); color: var(--slate); }
+  .lanes .num { text-align: left; }
+  .lanes td.action, .lanes td.status { grid-column: 1 / -1; }
+}
+
+@media (max-width: 520px) { .figure .bracket > * { display: none; } .figure .bracket { padding: 0; } }
+
+/* ------------------------------------------------------------ the one moment: tear, ring, burn (motion only on request) */
+@media (prefers-reduced-motion: no-preference) {
+  .stub.tearing { animation: tear 320ms cubic-bezier(.3, 0, .6, 1) forwards; }
+  @keyframes tear { 0% { transform: none; } 40% { transform: translateY(-3px) rotate(-2deg); } 100% { transform: translate(6px, 18px) rotate(8deg); opacity: 0; } }
+  .stub.arrive { animation: arrive 240ms ease-out; }
+  @keyframes arrive { from { opacity: 0; } to { opacity: 1; } }
+  .leaf.ringing::after { content: ""; position: absolute; inset: 0; box-shadow: 0 0 0 2px var(--prussian); animation: ring 420ms ease-out forwards; }
+  @keyframes ring { from { transform: scale(3.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .leaf.igniting::before, .mk.igniting::before { content: ""; position: absolute; inset: 0; background: var(--ink); animation: fill 380ms cubic-bezier(.2, .7, .2, 1) both; }
+  @keyframes fill { from { clip-path: inset(50%); } to { clip-path: inset(0); } }
+  .leaf.hatching::before, .mk.hatching::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, var(--ink) 0 1.4px, transparent 1.4px 3.6px); animation: wipe 380ms ease-out both; }
+  @keyframes wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+  .lane-row.fresh td { animation: fresh 900ms ease-out; }
+  @keyframes fresh { from { background: color-mix(in srgb, var(--prussian) 16%, transparent); } to { background: transparent; } }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#">Winterlock</a>
+  <nav class="screens" aria-label="Screens">
+    <a href="#" aria-current="page">Hot and cold</a>
+    <a href="#">Agent</a>
+    <a href="#">Session</a>
+  </nav>
+</header>
+<h1 class="vh">Hot and cold</h1>
+
+<div class="wrap">
+  <div id="banner" class="banner" role="alert" hidden><span id="banner-text"></span> <button class="btn" type="button" id="banner-retry">Try again</button></div>
+  <section id="wallet-head" aria-label="Wallet">
+    <dl class="wallet-head">
+      <div class="kv"><dt>wallet</dt><dd class="hex" title="0x66a5034c1e9B07d2A85f3E6b19C0a7F4e2b5D38A">0x66a503…D38A</dd></div>
+      <div class="kv"><dt>balance</dt><dd id="balance">9.947698 ETH</dd></div>
+      <div class="kv"><dt>epoch</dt><dd>0</dd></div>
+      <div class="kv"><dt>leaves used</dt><dd><span id="used">11</span> <span class="of">of 1,024</span></dd></div>
+      <div class="kv"><dt>lanes in flight</dt><dd id="inflight">1</dd></div>
+      <div class="kv"><dt>tickets</dt><dd><span id="head-tickets">3</span> <span class="of">of 10</span></dd></div>
+    </dl>
+  </section>
+  <p id="notice" class="notice" role="status" aria-live="polite"><span class="when" id="notice-when">14:02:31</span><span id="notice-text">Lane 0x2 admitted: 0.25 ETH from the cold device on leaf 2, pending.</span></p>
+
+  <main>
+    <fieldset class="scene" id="scene-fields">
+      <button class="btn primary" type="button" id="play">Play scene</button>
+      <p class="hint">The cold device cuts tickets if the phone has fewer than 7, then goes offline; the phone pays three times on the alt mempool as parallel lanes, the third one the stuck payment; then the mempool switches to public and the phone pays three more times, each shown admitted or refused.</p>
+    </fieldset>
+
+    <div class="sheet" id="sheet">
+      <!-- the cold device: an annotation of the cold band -->
+      <section class="note" id="cold-pane" aria-labelledby="cold-title">
+        <div class="note-head" id="cold-head">
+          <span class="band-mark" aria-hidden="true"></span>
+          <h2 id="cold-title">Cold device</h2>
+          <label class="toggle"><input type="checkbox" id="offline"> Offline</label>
+          <p class="small">The laptop. It holds the seed and signs the cold band, leaves 1 to 1007.</p>
+        </div>
+        <fieldset id="cold-fields">
+          <div class="group">
+            <h3>Key tree</h3>
+            <dl class="facts" id="tree-summary">
+              <dt>height</dt><dd>10</dd>
+              <dt>epoch</dt><dd>0</dd>
+              <dt>leaves used</dt><dd><span id="tree-used">11</span> of 1,024</dd>
+              <dt>hot band</dt><dd>leaves 1008 to 1023 (16)</dd>
+              <dt>root</dt><dd class="hex" title="0xd0c4e8a2b71f9c3d04e6a5b8c2f1e9d7a3b6c4e2f8d1a7b9c3e5f0a2d4b691ae">0xd0c4e8…b691ae</dd>
+            </dl>
+          </div>
+          <form id="transfer-form" class="group" novalidate>
+            <h3>Transfer</h3>
+            <p class="hint">Large transfers go through the cold device: a keyed lane on the next cold leaf, to any address, no cap.</p>
+            <label class="field"><span>To</span><input type="text" class="hex" id="transfer-to" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+            <div class="row">
+              <label class="field"><span>Amount, ETH</span><input type="text" id="transfer-amount" inputmode="decimal" autocomplete="off"></label>
+              <button class="btn primary" id="transfer" type="submit">Send from cold</button>
+            </div>
+            <span class="problem" id="transfer-problem" hidden></span>
+          </form>
+          <form id="policy-form" class="group" novalidate>
+            <h3>Hot policy</h3>
+            <div class="row">
+              <label class="field"><span>Value cap, ETH</span><input type="text" id="policy-value" inputmode="decimal" value="0.01"></label>
+              <label class="field"><span>Fee cap, ETH</span><input type="text" id="policy-fee" inputmode="decimal" value="0.002"></label>
+            </div>
+            <label class="field"><span>Allowed target</span><input type="text" class="hex" id="policy-target" spellcheck="false" value="0x2c58A1e07b9D34f6C2e8a5B10d7F93c4e6b2C537"></label>
+            <label class="field"><span>Hot start, the first hot leaf</span><input type="number" id="policy-start" min="1" step="1" value="1008"><span class="small">Kept or lowered, never raised within an epoch.</span></label>
+            <div class="row"><button class="btn primary" id="policy-set" type="submit">Set policy</button><span class="small">A value cap of 0 is the kill switch for every ticket.</span></div>
+          </form>
+          <form id="cut-form" class="group" novalidate>
+            <h3>Tickets for the phone</h3>
+            <p class="hint" id="cut-left">6 hot leaves not cut yet; 10 cut this epoch. Each ticket is one leaf's secrets and path, no seed.</p>
+            <div class="row">
+              <label class="field"><span>Count</span><input type="number" id="cut-count" min="1" max="6" step="1" value="6"></label>
+              <button class="btn" id="cut" type="submit">Cut tickets</button>
+            </div>
+          </form>
+          <form id="rotate-form" class="group" novalidate>
+            <h3>Rotation</h3>
+            <p class="warning">Rotation invalidates every pending lane.</p>
+            <div class="row">
+              <label class="field"><span>New tree height</span><input type="number" id="rotate-height" min="2" max="12" step="1" value="10"></label>
+              <button class="btn" id="rotate" type="submit">Rotate root</button>
+            </div>
+            <p class="small">The next tree is epoch 1: new secrets, 1,024 unused leaves. The backend refuses to rotate while a lane is in flight; the wallet moves to the new epoch once the rotation is included.</p>
+          </form>
+        </fieldset>
+      </section>
+
+      <!-- the plate -->
+      <section class="plate" aria-labelledby="plate-title">
+        <div class="plate-caption">
+          <h2 id="plate-title">Key tree, epoch 0</h2>
+          <p>1,024 one-time keys for chain 1337. Leaf <span class="var">i</span> signs only on lane <span class="var">key</span>&nbsp;=&nbsp;(<span class="var">epoch</span>&nbsp;≪&nbsp;32)&nbsp;∣&nbsp;<span class="var">i</span>, at sequence 0, and the chain burns that key when it approves the payment.</p>
+        </div>
+        <div class="figure">
+          <div class="ticks-x" aria-hidden="true"><span style="grid-column:1">0</span><span style="grid-column:9">256</span><span style="grid-column:17">512</span><span style="grid-column:25">768</span></div>
+          <div class="ticks-y" aria-hidden="true"></div>
+          <div class="leaves" id="field" tabindex="0" role="group" aria-label="Leaf field: 1,024 leaves, 32 to a column. Arrow keys move between leaves; Enter opens the lane that signed it." aria-describedby="readout"></div>
+          <div class="gutter" aria-hidden="true"><div class="bracket" id="hot-bracket"><b>hot band</b><span><span class="var">i</span> ∈ [1008, 1023]</span></div></div>
+          <p class="under">Cold band, leaves 1 to 1007: the laptop signs these. The sodium column is the hot band. Each column holds 32 leaves, read top to bottom, left to right.</p>
+        </div>
+        <ul class="legend" aria-label="Legend">
+          <li><i class="mk"></i>unused</li>
+          <li><i class="mk flight"></i>signed, in flight</li>
+          <li><i class="mk burn"></i>burned by the chain</li>
+          <li><i class="mk jour"></i>burned by the journal: refused or expired</li>
+          <li><i class="mk hot cut"></i>ticket on the phone</li>
+          <li><i class="mk hot"></i>hot band, not cut</li>
+          <li><i class="mk void"></i>void: key 0</li>
+        </ul>
+        <div class="readout" id="readout" aria-live="polite"></div>
+      </section>
+
+      <!-- the phone: an annotation of the hot band -->
+      <section class="note" id="phone-pane" aria-labelledby="phone-title">
+        <div class="note-head" id="phone-head">
+          <span class="band-mark" aria-hidden="true"></span>
+          <h2 id="phone-title">Phone</h2>
+          <p class="small">The backend's ticket device: signs from its ticket files, never from the seed.</p>
+        </div>
+        <fieldset id="phone-fields">
+          <div class="group">
+            <p class="counter"><span class="big" id="ticket-count">3</span><span class="of">of 10</span></p>
+            <p class="small" id="ticket-note">tickets left of those cut; 7 used or burned</p>
+            <ol class="stubs" id="stubs" aria-label="Tickets cut to the phone"></ol>
+            <p class="warning" id="device-issue" role="status" hidden></p>
+          </div>
+          <form id="pay-form" class="group" novalidate>
+            <label class="field"><span>To, the allowed target</span><input type="text" class="hex" id="pay-to" readonly value="0x2c58A1e07b9D34f6C2e8a5B10d7F93c4e6b2C537"></label>
+            <label class="field"><span>Amount, ETH</span><input type="text" id="pay-amount" inputmode="decimal" autocomplete="off" value="0.001" aria-describedby="pay-cap pay-problem">
+              <span class="small" id="pay-cap">Hot value cap 0.01 ETH per payment, fee cap 0.002 ETH.</span><span class="problem" id="pay-problem" hidden></span></label>
+            <div class="row">
+              <button class="btn primary" id="pay" type="submit">Pay</button>
+              <button class="btn" id="stuck" type="button">Simulate stuck payment</button>
+            </div>
+            <p class="hint">The stuck payment's first try gets 4 seconds, less than one 6-second block, so it misses its block and expires: its ticket is burned. One retry goes out on a fresh lane with the normal deadline. The expired leaf is never re-signed and never fee-bumped.</p>
+          </form>
+          <p class="set-aside" id="phone-set-aside"></p>
+        </fieldset>
+      </section>
+    </div>
+
+    <section class="board" id="board" aria-labelledby="board-title">
+      <div class="board-head">
+        <h2 id="board-title">Lane board</h2>
+        <div class="controls">
+          <span id="mempool-label">Mempool</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="mempool-label">
+            <label><input type="radio" name="mempool" value="alt" checked><span>alt</span></label>
+            <label><input type="radio" name="mempool" value="public"><span>public</span></label>
+          </div>
+        </div>
+      </div>
+      <p id="set-aside" class="set-aside"></p>
+      <p id="lane-limits" class="lane-limits"></p>
+      <div class="table-wrap">
+        <table class="lanes">
+          <caption class="vh">Lanes: one row per transaction, newest first</caption>
+          <thead><tr><th scope="col">Lane</th><th scope="col">Leaf</th><th scope="col">Action</th><th scope="col" class="num">Amount</th><th scope="col" class="num">Gas</th><th scope="col">Status</th></tr></thead>
+          <tbody id="lanes"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer class="status-line" id="status" aria-label="Status">
+  <span class="parts"><span>backend (via this server)</span><span>chain 1337</span><span id="head-block">latest block 408,263, 4 s ago</span></span>
+  <span>Prototype. Mempool and chain simulated in page.</span>
+</footer>
+<script>
+(() => {
+  "use strict";
+  const N = 1024, HOT = 1008, CUT_FROM = 1008, CUT_TO = 1017, CAP = 0.01, FEE_CAP = 0.002;
+  const TARGET = "0x2c58A1e07b9D34f6C2e8a5B10d7F93c4e6b2C537";
+  const $ = (id) => document.getElementById(id);
+  const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const later = (ms, f) => setTimeout(f, ms);
+  const int = (n) => n.toLocaleString("en-US");
+  const eth = (x) => `${+x.toFixed(6)} ETH`;
+  const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+  const hex = (n) => `0x${n.toString(16)}`;
+  let head = 408263;
+
+  // ---------------------------------------------------------------- state: one entry per leaf
+  // free, void (key 0), burn (the chain consumed the key), jour (the journal burned it: refused or expired),
+  // flight (signed, lane admitted or pending), cut (a ticket on the phone), uncut (hot band, still on the laptop)
+  const st = new Array(N).fill("free");
+  st[0] = "void"; st[1] = "burn"; st[2] = "flight";
+  for (let i = HOT; i < N; i++) st[i] = "uncut";
+  for (let i = 1008; i <= 1012; i++) st[i] = "burn";
+  st[1013] = st[1014] = "jour";
+  for (let i = 1015; i <= CUT_TO; i++) st[i] = "cut";
+
+  const hot = (i) => i >= HOT;
+  const lane = (o) => ({ hot: o.leaf >= HOT, to: TARGET, gas: null, block: null, why: "", reason: "", mempool: "alt", ...o, lane: hex(o.leaf) });
+  // newest first, as the board sorts them; steps are [mark, label, seconds after the first step, block]
+  const lanes = [
+    lane({ leaf: 2, action: "pay 0x5544…16f9", to: "0x55440b2Ad93E7c1f05B6a8E4d2C79f3a1E0b16f9", amount: 0.25, status: "admitted", steps: [["flight", "admitted", 0], ["flight", "pending", 1.1]] }),
+    lane({ leaf: 1014, action: "hot ticket to 0x53c9…6356", to: "0x53c9E1a4b7D20f8C3e6A95d1B4f07c2E8a9d6356", amount: 0.001, status: "refused", steps: [["jour", "refused", 0]], why: "target not allowed", reason: "account: hot: frame target" }),
+    lane({ leaf: 1013, action: "hot ticket to 0x2c58…C537", amount: 0.1, status: "refused", steps: [["jour", "refused", 0]], why: "exceeds value cap", reason: "account: hot: value cap" }),
+    lane({ leaf: 1012, action: "hot ticket to 0x2c58…C537", amount: 0.01, gas: 88019, status: "included", block: 408258, steps: [["flight", "admitted", 0], ["flight", "pending", 0.9], ["burn", "included", 7.4, 408258]] }),
+    lane({ leaf: 1011, action: "hot ticket to 0x2c58…C537", amount: 0.01, gas: 88019, status: "included", block: 408257, steps: [["flight", "admitted", 0], ["flight", "pending", 1.0], ["burn", "included", 3.6, 408257]] }),
+    lane({ leaf: 1010, action: "hot ticket to 0x2c58…C537", amount: 0.001, gas: 87028, status: "included", block: 408258, steps: [["flight", "admitted", 0], ["flight", "pending", 1.2], ["burn", "included", 8.1, 408258]] }),
+    lane({ leaf: 1009, action: "hot ticket to 0x2c58…C537", amount: 0.01, gas: 88019, status: "included", block: 408256, steps: [["flight", "admitted", 0], ["flight", "pending", 0.8], ["burn", "included", 4.9, 408256]] }),
+    lane({ leaf: 1008, action: "hot ticket to 0x2c58…C537", amount: 0.001, gas: 87028, status: "included", block: 408244, steps: [["flight", "admitted", 0], ["flight", "pending", 1.0], ["burn", "included", 5.5, 408244]] }),
+    lane({ leaf: 1, action: "pay 0x5544…16f9", to: "0x55440b2Ad93E7c1f05B6a8E4d2C79f3a1E0b16f9", amount: 0.01, gas: 86353, status: "included", block: 408201, steps: [["flight", "admitted", 0], ["flight", "pending", 1.0], ["burn", "included", 6.2, 408201]] }),
+  ];
+  const laneOf = (i) => lanes.find((l) => l.leaf === i) || null;
+  const statusWords = { admitted: "admitted", included: "included", refused: "refused, leaf burned", expired: "expired, leaf burned" };
+
+  // ---------------------------------------------------------------- the marks
+  function marks(i, s = st[i]) {
+    const m = { burn: " burn", jour: " jour", flight: " flight", cut: " cut", void: " void" }[s] || "";
+    return (hot(i) ? " hot" : "") + m;
+  }
+  const mk = (i, s) => `<i class="mk${marks(i, s)}" aria-hidden="true"></i>`;
+
+  // ---------------------------------------------------------------- the plate
+  const field = $("field");
+  const cells = [];
+  for (let i = 0; i < N; i++) { const c = document.createElement("span"); c.className = "leaf" + marks(i); c.dataset.i = i; cells.push(c); }
+  field.append(...cells);
+  const ty = document.querySelector(".ticks-y");
+  for (let r = 0; r < 32; r++) { const s = document.createElement("span"); s.textContent = r % 8 === 0 ? String(r) : ""; ty.append(s); }
+
+  function paint(i, anim, from) {
+    const c = cells[i];
+    if (!anim || calm()) { c.className = "leaf" + marks(i) + (sel === i ? " sel" : ""); return; }
+    c.className = "leaf" + marks(i, from ?? st[i]) + " " + anim;
+    later(440, () => { c.className = "leaf" + marks(i) + (sel === i ? " sel" : ""); });
+  }
+
+  // ---------------------------------------------------------------- the readout: the selected leaf, its key, its signature
+  let sel = 1012;
+  function digits(seed) {
+    let h = 2166136261;
+    for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    const d = [];
+    for (let k = 0; k < 64; k++) { h = Math.imul(h ^ (h >>> 15), 2246822507) ^ k * 2654435761; h ^= h >>> 13; d.push((h >>> 0) % 16); }
+    const sum = d.reduce((a, x) => a + (15 - x), 0);
+    return { d: [...d, (sum >> 8) & 15, (sum >> 4) & 15, sum & 15], steps: 0 };
+  }
+  function signature(l) {
+    const { d } = digits(l.lane + l.leaf);
+    const steps = d.reduce((a, x) => a + (15 - x), 0);
+    const col = (x) => `<span class="chain">${Array.from({ length: 16 }, (_, r) => `<i class="${15 - r <= x ? "on" : ""}"></i>`).join("")}</span>`;
+    const bars = d.slice(0, 64).map(col).join("") + `<span class="gap"></span>` + d.slice(64).map(col).join("");
+    return `<div class="sig"><div class="chains" role="img" aria-label="WOTS+ signature: 67 chains, example digits">${bars}</div>
+      <p class="small">WOTS+ signature, 2,144 bytes: 64 message chains and 3 checksum chains of 16 steps (example digits). Ink runs up to the digit each chain reveals; the account hashes the ${steps} outline steps to the public key.</p></div>`;
+  }
+  function pathRungs(i) {
+    const r = Array.from({ length: 14 }, (_, k) => `<li class="${k >= 10 ? "slot" : ((i >> k) & 1 ? "r" : "")}" title="level ${k}">${k}</li>`).join("");
+    return `<div><ol class="path" aria-label="Authentication path, 14 levels">${r}</ol><p class="small">Authentication path, 14 siblings: levels 0 to 9 in the chain's subtree (ink where bit <span class="var">k</span> of ${i} is 1, our node the right child), 10 to 13 the slot layer, slot 0.</p></div>`;
+  }
+  function stateWords(i) {
+    const l = laneOf(i);
+    switch (st[i]) {
+      case "void": return "Void. At epoch 0 this leaf would be key 0, the legacy nonce, which the account refuses.";
+      case "free": return "Unused. No signature exists for this key; the laptop signs it when the cold band reaches it.";
+      case "uncut": return "Hot band, not cut yet: only the laptop holds its secrets.";
+      case "cut": return "A ticket on the phone: its secrets and path are in a ticket file, not signed yet.";
+      case "flight": return `Signed, in flight: lane ${l.lane} is ${l.steps.at(-1)[1]}. The chain burns this key when it approves the payment.`;
+      case "burn": return `Burned by the chain: lane ${l.lane} was included in block ${int(l.block)}, which consumed its key.`;
+      case "jour": return `Burned by the journal: lane ${l.lane} was ${l.status}${l.why ? `, ${l.why}` : ""}. The chain never consumed the key, and the leaf is never signed again.`;
+    }
+    return "";
+  }
+  function readout(i) {
+    const l = laneOf(i);
+    const key = i === 0 ? "0" : hex(i);
+    $("readout").innerHTML = `<p class="readout-title">${mk(i)}Leaf ${i}${hot(i) ? ", hot band" : i ? ", cold band" : ""}</p>
+      <p class="formula"><span class="var">key</span> = (0 ≪ 32) ∣ ${i} = <span class="hex">${key}</span></p>
+      <p class="hint">${stateWords(i)}</p>
+      ${l ? `<p class="small">Lane <span class="hex">${l.lane}</span>: ${l.action}, ${eth(l.amount)}.</p>${signature(l)}${pathRungs(i)}` : ""}`;
+  }
+  function select(i, show = true) {
+    cells[sel]?.classList.remove("sel");
+    sel = Math.max(0, Math.min(N - 1, i));
+    cells[sel].classList.add("sel");
+    if (show) readout(sel);
+  }
+  field.addEventListener("mouseover", (e) => { const i = e.target.dataset?.i; if (i !== undefined) readout(+i); });
+  field.addEventListener("mouseleave", () => readout(sel));
+  field.addEventListener("click", (e) => { const i = e.target.dataset?.i; if (i === undefined) return; select(+i); const l = laneOf(+i); if (l) open(l.lane, true); });
+  field.addEventListener("keydown", (e) => {
+    const step = { ArrowDown: 1, ArrowUp: -1, ArrowRight: 32, ArrowLeft: -32 }[e.key];
+    if (step) { e.preventDefault(); select(sel + step); return; }
+    if (e.key === "Home" || e.key === "End") { e.preventDefault(); select(e.key === "Home" ? 0 : N - 1); return; }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); const l = laneOf(sel); if (l) open(l.lane, true); }
+  });
+
+  // ---------------------------------------------------------------- the phone's tickets
+  const left = () => { let n = 0; for (let i = CUT_FROM; i <= CUT_TO; i++) if (st[i] === "cut") n++; return n; };
+  const nextTicket = () => { for (let i = CUT_FROM; i <= CUT_TO; i++) if (st[i] === "cut") return i; return -1; };
+  function drawStubs() {
+    const items = [];
+    for (let i = CUT_FROM; i <= CUT_TO; i++) {
+      const gone = st[i] !== "cut";
+      items.push(`<li class="stub${gone ? " gone" : ""}" data-leaf="${i}" aria-label="ticket ${i}${gone ? `, ${st[i] === "flight" ? "in flight" : "burned"}` : ""}">${i}${gone ? mk(i) : ""}</li>`);
+    }
+    $("stubs").innerHTML = items.join("");
+    const n = left();
+    $("ticket-count").textContent = n; $("head-tickets").textContent = n;
+    $("ticket-note").textContent = n ? `tickets left of those cut; ${10 - n} used or burned` : "no ticket left: cut more on the cold device";
+  }
+  function tear(i, then) {
+    const s = $("stubs").querySelector(`[data-leaf="${i}"]`);
+    if (!s || calm()) { then(); return; }
+    s.classList.add("tearing");
+    later(330, then);
+  }
+
+  // ---------------------------------------------------------------- the lane board
+  function stepsHtml(l) {
+    return `<ol class="steps" aria-label="timeline">${l.steps.map((s, k) => `<li class="step${k === l.steps.length - 1 ? " now" : ""}"><i class="mk${s[0] === "flight" ? " flight" : s[0] === "burn" ? " burn" : " jour"}" aria-hidden="true"></i>${s[1]}${s[3] ? ` in ${int(s[3])}` : ""}${k ? ` <span class="when">+${s[2].toFixed(1)} s</span>` : ""}</li>`).join("")}</ol>`;
+  }
+  function detail(l) {
+    const checks = l.status === "refused"
+      ? [["fail", `${l.reason}: ${l.why}`], ["pass", "prefix shape: expiry, then self verify"], ["pass", `nonce key ${l.lane} unused, sequence 0`]]
+      : [["pass", "prefix shape: expiry, then self verify"], ["pass", `nonce key ${l.lane} unused, sequence 0`], ["pass", l.gas ? `verify gas ${int(l.gas)} within the 90,000 declared` : "verify gas within the 90,000 declared"], ...(l.hot ? [["pass", `hot policy: to the allowed target, ${eth(l.amount)} within the ${eth(CAP)} cap`]] : [])];
+    const receipt = l.status === "included" ? `block ${int(l.block)}, success, the key consumed at approval` : l.status === "admitted" ? "none yet: followed until it is included or its deadline passes" : "none: never included, so the chain never consumed the key";
+    return `<tr class="detail-row"><td colspan="6"><div class="detail">
+      <div><h3>${l.status === "refused" ? "Refused because" : "Admission report"}</h3><ul class="checks">${checks.map(([v, t]) => `<li><b>${v}</b> ${t}</li>`).join("")}</ul></div>
+      <div><h3>Receipt</h3><p>${receipt}</p><p class="small">mempool ${l.mempool}; to <span class="hex">${short(l.to)}</span>; <a href="#" onclick="return false">explorer</a></p></div>
+    </div></td></tr>`;
+  }
+  let opened = null;
+  function drawBoard() {
+    $("lanes").innerHTML = lanes.map((l) => {
+      const gone = l.status === "refused" || l.status === "expired";
+      const links = (l.retryOf ? ` <span class="small">retry of lane ${l.retryOf}, not re-signed: a fresh leaf on a fresh lane</span>` : "") + (l.retriedAs ? ` <span class="small">retried as lane ${l.retriedAs}</span>` : "");
+      return `<tr class="lane-row${gone ? " gone" : ""}${l.fresh ? " fresh" : ""}" tabindex="0" data-lane="${l.lane}" aria-expanded="${opened === l.lane}">
+        <td class="hex" data-label="Lane">${l.lane}</td>
+        <td data-label="Leaf"><span class="leafcell">${mk(l.leaf)}${l.leaf}<span class="chip${l.hot ? "" : " cold"}">${l.hot ? "hot" : "cold"}</span></span></td>
+        <td class="action" data-label="Action">${l.action}${l.mempool === "public" ? ' <span class="chip cold">public</span>' : ""}${links}</td>
+        <td class="num" data-label="Amount">${eth(l.amount)}</td>
+        <td class="num" data-label="Gas" title="verify-frame gas">${l.gas ? int(l.gas) : "—"}</td>
+        <td class="status" data-label="Status"><strong class="vh">${statusWords[l.status]}</strong>${stepsHtml(l)}${l.why ? `<span class="why">Leaf burned: ${l.why} <span class="hex">(${l.reason})</span></span>` : ""}</td>
+      </tr>${opened === l.lane ? detail(l) : ""}`;
+    }).join("");
+    for (const l of lanes) l.fresh = false;
+  }
+  function open(id, fromPlate) {
+    opened = opened === id && !fromPlate ? null : id;
+    drawBoard();
+    const l = lanes.find((x) => x.lane === id);
+    if (l && !fromPlate) select(l.leaf);
+    if (fromPlate) $("lanes").querySelector(`[data-lane="${id}"]`)?.scrollIntoView({ block: "nearest", behavior: calm() ? "auto" : "smooth" });
+  }
+  $("lanes").addEventListener("click", (e) => { const r = e.target.closest(".lane-row"); if (r && !e.target.closest("a")) open(r.dataset.lane); });
+  $("lanes").addEventListener("keydown", (e) => { const r = e.target.closest(".lane-row"); if (r && e.target === r && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); open(r.dataset.lane); $("lanes").querySelector(`[data-lane="${r.dataset.lane}"]`)?.focus(); } });
+
+  // ---------------------------------------------------------------- the shared lines
+  const LIMITS = "Parallel lanes on the devnet's sidecar: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself, relayed at most 4 per 10 s pass by default, so 8 lanes land over two or more blocks. (The ERC-8421 draft's numbers, 4 per key and 64 per unstaked sender, are the draft's, not the devnet's.) The public mempool holds one pending per sender: not yet confirmed on the devnet.";
+  $("lane-limits").textContent = LIMITS;
+  function setAside() {
+    const p = lanes.filter((l) => l.status === "admitted");
+    if (!p.length) return "set aside for pending: nothing, no lane in flight";
+    const h = p.filter((l) => l.hot).length, k = p.length - h;
+    const total = p.reduce((a, l) => a + l.amount, 0) + h * FEE_CAP;
+    return `set aside for pending: ${eth(total)} on ${p.length} lane${p.length === 1 ? "" : "s"}` +
+      (h ? ` (values, plus the hot fee cap for ${h === 1 ? "the ticket" : `each of ${h} tickets`}: an upper bound)` : " (values only)") +
+      (k ? ` plus the fees of ${k} keyed lane${k === 1 ? "" : "s"}, which the API does not report` : "");
+  }
+  function notice(text) { $("notice-when").textContent = new Date().toTimeString().slice(0, 8); $("notice-text").textContent = text; }
+  const mempool = () => document.querySelector('input[name="mempool"]:checked').value;
+  function update() {
+    drawBoard(); drawStubs();
+    $("set-aside").textContent = $("phone-set-aside").textContent = setAside();
+    $("inflight").textContent = lanes.filter((l) => l.status === "admitted").length;
+    $("head-block").textContent = `latest block ${int(head)}, 4 s ago`;
+    check();
+    readout(sel);
+  }
+
+  // ---------------------------------------------------------------- the one moment: pay tears a ticket, rings its leaf, the chain burns it
+  function check() {
+    const v = $("pay-amount").value.trim(), x = Number(v);
+    const err = !/^\d*\.?\d+$/.test(v) ? "an amount in ETH, at most 18 decimals" : x <= 0 ? "more than 0" : x > CAP ? `above the hot value cap of ${eth(CAP)}; the account refuses it too` : "";
+    $("pay-problem").hidden = !err; $("pay-problem").textContent = err;
+    $("pay-amount").setAttribute("aria-invalid", String(!!err));
+    $("pay").disabled = !!err || left() === 0; $("stuck").disabled = !!err || left() === 0;
+    return err ? null : x;
+  }
+  $("pay-amount").addEventListener("input", check);
+
+  function send(amount, { stuck = false, retryOf = null } = {}) {
+    const leaf = nextTicket();
+    if (leaf < 0) { notice("No ticket left for this payment: cut more on the cold device."); return null; }
+    const l = lane({ leaf, action: `hot ticket to ${short(TARGET)}`, amount, status: "admitted", steps: [["flight", "admitted", 0]], mempool: mempool(), fresh: true, retryOf, t0: Date.now() });
+    const blocker = lanes.find((x) => x.status === "admitted");
+    st[leaf] = "flight";
+    tear(leaf, () => {
+      lanes.unshift(l);
+      if (l.mempool === "public" && blocker) {
+        Object.assign(l, { status: "refused", steps: [["jour", "refused", 0]], why: `one pending per sender, and lane ${blocker.lane} is pending`, reason: "public mempool" });
+        st[leaf] = "jour"; paint(leaf, "hatching", "flight"); select(leaf, false); update();
+        notice(`Refused: the public mempool holds one pending per sender and lane ${blocker.lane} is pending. Ticket ${leaf} is burned by the journal and never signed again.`);
+        return;
+      }
+      paint(leaf, "ringing"); select(leaf, false); update();
+      notice(retryOf ? `Retry of lane ${retryOf} on ticket ${leaf}, lane ${l.lane}: admitted. Not re-signed: a fresh leaf on a fresh lane.` : `Paid ${eth(amount)} with ticket ${leaf} on lane ${l.lane}: admitted.`);
+      later(1000, () => { l.steps.push(["flight", "pending", (Date.now() - l.t0) / 1000]); update(); });
+      if (stuck) {
+        later(4000, () => {
+          l.status = "expired"; l.why = "its 4 s deadline passed before a block"; l.reason = "expiry frame";
+          l.steps.push(["jour", "expired, leaf burned", (Date.now() - l.t0) / 1000]);
+          st[leaf] = "jour"; paint(leaf, "hatching", "flight"); update();
+          notice(`Lane ${l.lane} expired: ticket ${leaf} is burned by the journal. One retry goes out on a fresh lane; nothing is fee-bumped.`);
+          later(700, () => { const r = send(amount, { retryOf: l.lane }); if (r) { l.retriedAs = r.lane; update(); } });
+        });
+      } else {
+        later(3600 + Math.round(Math.random() * 1400), () => {
+          head += 1;
+          Object.assign(l, { status: "included", block: head, gas: amount <= 0.001 ? 87028 : 88019 });
+          l.steps.push(["burn", "included", (Date.now() - l.t0) / 1000, head]);
+          st[leaf] = "burn"; paint(leaf, "igniting", "flight"); update();
+          notice(`Lane ${l.lane} included in block ${int(head)}: the chain consumed key ${l.lane} and burned leaf ${leaf}.`);
+        });
+      }
+    });
+    return l;
+  }
+  $("pay-form").addEventListener("submit", (e) => { e.preventDefault(); const x = check(); if (x !== null) send(x); });
+  $("stuck").addEventListener("click", () => { const x = check(); if (x !== null) send(x, { stuck: true }); });
+
+  // ---------------------------------------------------------------- the other controls: present, not played in this mock
+  const notPlayed = (what) => (e) => { e.preventDefault(); notice(`${what} is not played in this mock: it plays Pay and Simulate stuck payment. The design note describes its moment.`); };
+  $("transfer-form").addEventListener("submit", notPlayed("Send from cold"));
+  $("policy-form").addEventListener("submit", notPlayed("Set policy"));
+  $("cut-form").addEventListener("submit", notPlayed("Cut tickets"));
+  $("play").addEventListener("click", notPlayed("Play scene"));
+  let armedUntil = 0;
+  $("rotate-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const b = $("rotate");
+    if (Date.now() > armedUntil) {
+      armedUntil = Date.now() + 6000; b.textContent = "Confirm: rotate root"; b.classList.add("armed");
+      later(6100, () => { if (Date.now() >= armedUntil) { b.textContent = "Rotate root"; b.classList.remove("armed"); } });
+      return;
+    }
+    armedUntil = 0; b.textContent = "Rotate root"; b.classList.remove("armed");
+    const p = lanes.filter((l) => l.status === "admitted").map((l) => l.lane);
+    notice(p.length ? `Rotation refused: ${p.length === 1 ? "lane" : "lanes"} ${p.join(", ")} in flight. The backend rotates only when no lane is pending.` : "Rotation is not played in this mock; the design note draws the new tree.");
+  });
+  $("offline").addEventListener("change", (e) => {
+    $("cold-pane").classList.toggle("offline", e.target.checked);
+    $("cold-fields").disabled = e.target.checked;
+    notice(e.target.checked ? "Cold device offline: the phone keeps paying from its tickets." : "Cold device online.");
+  });
+  for (const r of document.querySelectorAll('input[name="mempool"]')) r.addEventListener("change", () => {
+    $("board").classList.toggle("public", mempool() === "public");
+    notice(mempool() === "public"
+      ? "Mempool: public. It holds one pending frame transaction per sender (not yet confirmed on the devnet), so a second lane may be refused and its leaf burned."
+      : "Mempool: alt. Parallel lanes: 1 pending per lane (nonce key); they land out of order.");
+  });
+
+  // ---------------------------------------------------------------- leaders from the annotations to their bands (wide screens)
+  function leaders() {
+    const cold = $("cold-pane"), phone = $("phone-pane");
+    cold.style.marginTop = phone.style.marginTop = "";
+    if (!matchMedia("(min-width: 1140px)").matches) return;
+    const f = field.getBoundingClientRect(), b = $("hot-bracket").getBoundingClientRect();
+    const ch = $("cold-head").getBoundingClientRect();
+    cold.style.marginTop = `${Math.max(0, f.top + 6 - (ch.top + 14))}px`;
+    const ch2 = $("cold-head").getBoundingClientRect();
+    cold.style.setProperty("--lead-cold", `${Math.max(0, f.left - 30 - ch2.right - 8)}px`);
+    const ph = $("phone-head").getBoundingClientRect();
+    phone.style.marginTop = `${Math.max(0, b.top + b.height / 2 - (ph.top + 14))}px`;
+    const ph2 = $("phone-head").getBoundingClientRect();
+    phone.style.setProperty("--lead-hot", `${Math.max(0, ph2.left - 8 - (b.right + 6))}px`);
+  }
+  let raf = 0;
+  addEventListener("resize", () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(leaders); });
+
+  select(sel, false);
+  update();
+  leaders();
+  document.fonts?.ready.then(leaders);
+})();
+</script>
+</body>
+</html>

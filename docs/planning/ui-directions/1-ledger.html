@@ -1,0 +1,1124 @@
+<!doctype html>
+<!-- Direction 1, "Ledger" (the instrument): a static mock of the hot-and-cold screen. The mempool and the chain are
+     simulated in the page; nothing calls an API. Review aids in the URL: ?theme=dark|light, ?motion=reduce, ?freeze
+     (the in-flight lane never lands), ?play (runs Play scene on load). Written with Claude Code (AI) for Vicky. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Hot and cold, ledger direction</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&amp;family=Besley:ital,wght@0,400..900;1,400..900&amp;display=swap">
+<style>
+/* Tokens. Six inks, each with one owner:
+   ledger  the page (accountant's ruled stock)      stock   paper objects: tickets, stubs, fields, vouchers
+   print   what the form asks (labels, rules, hints) ink     what is true now (values, buttons, statuses)
+   serial  numbers the key tree prints (leaves, lanes, the hot band)
+   stamp   marks the chain or the signer makes when a leaf is burned */
+:root {
+  --ledger: #e6eee2;
+  --stock: #ffffff;
+  --print: #2e5c3e;
+  --ink: #000000;
+  --serial: #c4122f;
+  --stamp: #4b2b80;
+  --blend: multiply;
+  --rule: color-mix(in srgb, var(--print) 26%, var(--ledger));
+  --rule-stock: color-mix(in srgb, var(--print) 22%, var(--stock));
+  --rule-strong: color-mix(in srgb, var(--print) 62%, var(--ledger));
+  --hole: var(--ledger);
+  --serif: "Besley", Georgia, "Times New Roman", serif;
+  --sans: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ledger: #10291e; --stock: #183a2b; --print: #9cc7a8; --ink: #f1f5ee; --serial: #f5a1a7; --stamp: #c7aef5;
+    --blend: normal; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ledger: #10291e; --stock: #183a2b; --print: #9cc7a8; --ink: #f1f5ee; --serial: #f5a1a7; --stamp: #c7aef5;
+  --blend: normal; color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--ledger); color: var(--ink); font: 400 16px/24px var(--sans); font-stretch: 100%; }
+h1, h2, h3, h4, p, dl, dd, ol, ul { margin: 0; }
+h2, h3, h4 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.005em; }
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 40px; }
+
+/* ------------------------------------------------------------ masthead, account line, notice */
+.masthead { border-bottom: 1px solid var(--rule); }
+.masthead .wrap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 32px; padding-top: 20px; padding-bottom: 14px; }
+.brand { font: 800 24px/32px var(--serif); letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+.screens { display: flex; flex-wrap: wrap; gap: 4px 24px; }
+.screens a { font: 500 16px/24px var(--sans); color: var(--print); text-decoration: none; padding: 4px 0 2px; border-bottom: 2px solid transparent; }
+.screens a:hover { color: var(--ink); }
+.screens a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+.banner { margin-top: 16px; padding: 12px 16px; border-radius: 2px; background: var(--ink); color: var(--ledger); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.banner[hidden] { display: none; }
+.banner .btn { border-color: var(--ledger); color: var(--ledger); }
+
+.account dl { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 40px; padding-top: 24px; }
+.kv { display: grid; min-width: 0; }
+.kv dt { font: 500 14px/20px var(--sans); color: var(--print); }
+.kv dd { margin: 0; font: 600 18px/24px var(--sans); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kv.lead dd { font-size: 24px; line-height: 32px; }
+
+.notice { display: flex; gap: 12px; align-items: baseline; min-height: 20px; margin-top: 12px; font: 400 14px/20px var(--sans); overflow-wrap: anywhere; }
+.notice .when { flex: none; color: var(--print); font-variant-numeric: tabular-nums; }
+.notice .error { font-weight: 600; }
+
+.scene { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 20px; }
+.scene .hint { flex: 1 1 320px; }
+
+/* ------------------------------------------------------------ controls */
+.field { display: grid; gap: 6px; min-width: 0; }
+.label { font: 500 14px/20px var(--sans); color: var(--print); }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.row > .field { flex: 1 1 140px; }
+input[type="text"], input[type="number"] {
+  width: 100%; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--ink); border-radius: 2px;
+  background: var(--stock); color: var(--ink); font: 400 16px/24px var(--sans); font-variant-numeric: tabular-nums;
+}
+input::placeholder { color: var(--print); opacity: 1; }
+input[aria-invalid="true"] { border-width: 2px; padding: 0 11px; }
+.hint { font: 400 14px/20px var(--sans); color: var(--print); max-width: 70ch; }
+.problem { font: 600 14px/20px var(--sans); color: var(--ink); }
+.problem[hidden], .warning[hidden] { display: none; }
+.warning { font: 600 14px/20px var(--sans); color: var(--ink); border-left: 4px solid var(--ink); padding: 2px 0 2px 12px; }
+
+.btn {
+  height: 40px; padding: 0 18px; border: 1px solid var(--ink); border-radius: 2px; background: transparent; color: var(--ink);
+  font: 600 16px/1 var(--sans); white-space: nowrap; cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--stock); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn.primary, .btn.armed { background: var(--ink); color: var(--ledger); }
+.btn.primary:hover:not(:disabled) { background: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.link { border: 0; padding: 0; background: none; color: var(--ink); font: 400 14px/20px var(--sans); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+.toggle { display: inline-flex; align-items: center; gap: 8px; font: 500 16px/24px var(--sans); cursor: pointer; }
+.toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--ink); }
+
+/* ------------------------------------------------------------ the instrument: cold book | perforation | phone */
+.instrument { display: grid; grid-template-columns: minmax(0, 7fr) 48px minmax(0, 5fr); margin-top: 36px; }
+.spine { background: radial-gradient(circle, var(--rule-strong) 1.4px, transparent 1.8px) center top / 8px 9px repeat-y; }
+.pane { min-width: 0; }
+.pane-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.pane-head h2 { font-size: 24px; line-height: 32px; }
+.pane-head p { font: 400 14px/20px var(--sans); color: var(--print); max-width: 46ch; }
+.pane.offline .cold-body { opacity: .4; }
+
+/* the key tree register: one cell per leaf, leaf 0 at the top left */
+.tree { margin-top: 20px; }
+.tree h3, .group h3 { font-size: 18px; line-height: 24px; color: var(--print); }
+.register { margin-top: 12px; display: grid; grid-template-columns: repeat(64, minmax(0, 1fr)); gap: 2px; }
+.cell { display: block; aspect-ratio: 1 / 1; box-shadow: inset 0 0 0 1px var(--rule); }
+.cell.c-hot { box-shadow: inset 0 0 0 1px var(--serial); }
+.cell.c-phone { background: var(--serial); box-shadow: none; }
+.cell.c-flight { background: var(--stock); box-shadow: inset 0 0 0 2px var(--ink); }
+.cell.c-burned { background: var(--stamp); box-shadow: none; }
+.cell.c-fill { animation: cell-fill 180ms var(--ease) both; }
+.cell.c-cut { animation: cell-cut 560ms var(--ease) both; }
+@keyframes cell-fill { from { transform: scale(.3); } }
+@keyframes cell-cut { 0%, 55% { background: transparent; box-shadow: inset 0 0 0 1px var(--serial); outline: 1.5px dashed var(--ink); outline-offset: 1px; } 100% { outline: 1.5px dashed transparent; } }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 12px; padding: 0; list-style: none; font: 400 14px/20px var(--sans); color: var(--print); }
+.legend li { display: inline-flex; align-items: center; gap: 8px; }
+.legend .cell { width: 10px; height: 10px; }
+.facts-inline { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-top: 16px; }
+
+.forms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; margin-top: 28px; }
+.group { border-top: 1px solid var(--rule); padding: 20px 0 28px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+
+/* the phone: count, the strip of ticket stubs, the next ticket */
+.count { margin-top: 24px; font: 700 36px/40px var(--serif); }
+.count-note { margin-top: 2px; }
+.stubs {
+  list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  background: var(--stock); border-radius: 4px; box-shadow: 0 0 0 1px var(--rule); overflow: hidden;
+}
+.stubs[hidden] { display: none; }
+.stub {
+  position: relative; height: 46px; display: grid; place-items: center; font: 700 13px/1 var(--serif); color: var(--serial);
+  background: radial-gradient(circle at 1.5px 3px, var(--hole) 1.2px, transparent 1.6px) 0 0 / 3px 6px repeat-y;
+}
+.stub:first-child { background: none; }
+.stub.next { box-shadow: inset 0 0 0 2px var(--ink); }
+.stub.flight::after { content: ""; position: absolute; inset: 9px 3px; border: 1.5px dashed var(--ink); border-radius: 2px; }
+.stub.burned::after { content: ""; position: absolute; inset: 9px 3px; border: 2px solid var(--stamp); border-radius: 2px; transform: rotate(-9deg); mix-blend-mode: var(--blend); }
+.stub.fresh { animation: stub-in 220ms var(--ease) both; animation-delay: calc(var(--i, 0) * 35ms); }
+@keyframes stub-in { from { opacity: 0; transform: translateY(-8px); } }
+
+.ticket { position: relative; margin-top: 16px; padding: 30px 24px 20px; background: var(--stock); border-radius: 4px; box-shadow: 0 0 0 1px var(--rule); display: grid; gap: 16px; }
+.ticket::before { content: ""; position: absolute; left: 10px; right: 10px; top: 9px; height: 6px; background: radial-gradient(circle at 3px 3px, var(--hole) 2px, transparent 2.5px) 0 0 / 11px 6px repeat-x; }
+.ticket.ghost { box-shadow: 0 0 0 1px var(--rule-strong); }
+.ticket-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.ticket-serial { font: 800 48px/48px var(--serif); letter-spacing: -0.015em; color: var(--serial); }
+.ticket-kind { font: 600 16px/24px var(--sans); font-stretch: 85%; color: var(--serial); }
+.ticket.empty .ticket-serial, .ticket.empty .ticket-kind { color: var(--print); }
+.ticket .printed { height: 32px; padding: 0; border: 0; border-bottom: 1px dashed var(--rule-strong); border-radius: 0; background: transparent; font-size: 15px; font-weight: 500; font-stretch: 85%; }
+.amount-box { position: relative; display: block; }
+.amount-box input { height: 56px; padding: 0 64px 0 14px; font: 600 24px/32px var(--sans); }
+.amount-box input[aria-invalid="true"] { padding-left: 13px; }
+.amount-box::after { content: "ETH"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font: 600 16px/1 var(--sans); color: var(--print); pointer-events: none; }
+.micr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding-top: 14px; border-top: 1px solid var(--rule-stock); font: 500 14px/20px var(--sans); font-stretch: 125%; letter-spacing: .02em; }
+.micr > span { display: inline-flex; align-items: center; gap: 6px; }
+.micr svg { width: 11px; height: 13px; fill: currentColor; }
+.micr .micr-empty { font-stretch: 100%; letter-spacing: 0; color: var(--print); }
+.pay-row { margin-top: 16px; }
+.phone-body > .hint, .phone-body .pay-hint { margin-top: 12px; }
+.set-aside { margin-top: 12px; font: 400 14px/20px var(--sans); }
+.reprint { animation: reprint 420ms var(--ease) both; }
+@keyframes reprint { from { opacity: 0; } }
+
+.roll { display: inline-block; position: relative; overflow: hidden; vertical-align: top; }
+.roll > span { display: inline-block; }
+
+/* ------------------------------------------------------------ the lane board, ruled like a ledger */
+.board { margin-top: 64px; }
+.board-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px 24px; }
+.board-head h2 { font-size: 24px; line-height: 32px; }
+.mempool { display: flex; align-items: center; gap: 12px; font: 500 14px/20px var(--sans); color: var(--print); }
+.segmented { display: inline-flex; border: 1px solid var(--ink); border-radius: 2px; }
+.segmented label { position: relative; }
+.segmented input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.segmented span { display: block; padding: 4px 16px; font: 600 16px/24px var(--sans); color: var(--ink); }
+.segmented label + label span { border-left: 1px solid var(--ink); }
+.segmented input:checked + span { background: var(--ink); color: var(--ledger); }
+.segmented input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+.lane-limits { margin-top: 20px; font: 400 14px/20px var(--sans); color: var(--print); max-width: 110ch; }
+
+.table-wrap { margin-top: 16px; overflow-x: clip; } /* a landing stamp never widens the page */
+table.lanes { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.w-lane { width: 88px; } .w-leaf { width: 112px; } .w-amount { width: 140px; } .w-gas { width: 96px; } .w-status { width: 42%; }
+.lanes th { padding: 0 16px 8px 0; border-bottom: 3px double var(--rule-strong); text-align: left; white-space: nowrap; font: 600 14px/20px var(--sans); font-stretch: 82%; color: var(--print); }
+.lanes td { padding: 16px 16px 16px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.lanes .r { text-align: right; }
+.lanes td.c-status { padding-right: 0; }
+.lane-row { cursor: pointer; }
+.lane-row:hover > td { background: color-mix(in srgb, var(--stock) 55%, transparent); }
+.lane-row.open > td { background: var(--stock); }
+.lane-row:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.lane-row.writing > td { animation: write-in 1100ms var(--ease) both; }
+.lane-row.writing .sn { animation: press 180ms ease-out both; }
+@keyframes write-in { from { background: var(--stock); } }
+@keyframes press { from { transform: scale(1.16); } }
+.sn { display: inline-block; font: 700 16px/24px var(--serif); color: var(--serial); }
+.tag { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid currentColor; border-radius: 2px; font: 600 12px/18px var(--sans); font-stretch: 85%; vertical-align: 1px; }
+.tag.hot { color: var(--serial); }
+.tag.public { background: var(--ink); border-color: var(--ink); color: var(--ledger); }
+.c-action { overflow-wrap: anywhere; }
+.links { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 4px; }
+
+/* amounts: decimal points aligned with hidden zeros; a double rule when money moved, a strike when none did */
+.amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.amt .fig { position: relative; display: inline-block; }
+.amt .pad { visibility: hidden; }
+.amt .unit { margin-left: 5px; font-size: 14px; color: var(--print); }
+.amt.final .fig::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); transform-origin: left center; }
+.amt.void .fig::after { content: ""; position: absolute; left: -2px; right: -2px; top: 50%; border-top: 1.5px solid var(--ink); transform-origin: left center; }
+.amt.draw .fig::after { animation: rule-draw 260ms var(--ease) 120ms both; }
+@keyframes rule-draw { from { transform: scaleX(0); } }
+
+.st { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: start; }
+.st-words { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 16px; font: 600 16px/24px var(--sans); }
+.st-words .explorer { font: 400 14px/20px var(--sans); }
+.st-reason { font: 400 14px/20px var(--sans); }
+.st-reason .code { color: var(--print); }
+.ticks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 14px; font: 400 14px/20px var(--sans); font-stretch: 92%; }
+.ticks li { white-space: nowrap; }
+.ticks li::before { content: ""; display: inline-block; width: 4px; height: 9px; margin: 0 8px 0 2px; border: solid var(--ink); border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); }
+.ticks li.x::before { width: 9px; height: 0; margin-left: 0; border-width: 1.5px 0 0; transform: translateY(-4px); }
+.ticks li.wait::before { width: 8px; height: 8px; margin-left: 0; border-width: 1.5px; border-radius: 50%; transform: translateY(-1px); }
+.ticks li.bare::before { display: none; }
+.ticks li.now { font-weight: 600; }
+.ticks .t { color: var(--print); font-weight: 400; font-variant-numeric: tabular-nums; }
+.st-mark { padding-top: 2px; }
+
+/* the cancellation stamp */
+.stamp {
+  display: inline-grid; justify-items: center; row-gap: 1px; padding: 4px 9px 5px; color: var(--stamp);
+  border: 2px solid var(--stamp); outline: 1px solid var(--stamp); outline-offset: 2px; border-radius: 3px;
+  font: 800 16px/16px var(--sans); font-stretch: 72%; white-space: nowrap; user-select: none;
+  mix-blend-mode: var(--blend); transform: translateX(var(--dx, 0)) rotate(var(--rot, -3deg)); margin: 3px 4px 0 0;
+}
+.stamp small { font: 600 12px/14px var(--sans); font-stretch: 85%; }
+.stamp.landing { animation: stamp-land 380ms cubic-bezier(.18, .9, .32, 1.28) both; }
+@keyframes stamp-land {
+  0% { opacity: 0; transform: translate(var(--dx, 0), -12px) rotate(calc(var(--rot, -3deg) - 10deg)) scale(1.9); }
+  55% { opacity: 1; }
+  100% { opacity: 1; transform: translateX(var(--dx, 0)) rotate(var(--rot, -3deg)) scale(1); }
+}
+
+.voucher > td { padding: 0 0 20px; border-bottom: 1px solid var(--rule); }
+.voucher-body { padding: 20px 24px; border-radius: 4px; background: var(--stock); display: grid; gap: 20px 32px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); cursor: auto; }
+.voucher h4 { font-size: 16px; line-height: 24px; margin-bottom: 4px; }
+.voucher ul, .voucher ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; font: 400 14px/20px var(--sans); }
+.voucher p { font: 400 14px/20px var(--sans); }
+.voucher .checks { list-style: none; padding-left: 0; }
+.checks li { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; }
+.checks .v { font-weight: 600; }
+.checks li.fail span:last-child { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.voucher .raw { list-style: none; padding-left: 0; }
+.voucher .raw .t { color: var(--print); font-variant-numeric: tabular-nums; }
+.vfacts { grid-column: 1 / -1; display: grid; gap: 8px 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+.vfacts dd { font-size: 14px; line-height: 20px; font-weight: 500; }
+.vlink { grid-column: 1 / -1; }
+.ruled > td { padding: 20px 0 16px; border-bottom: 3px double var(--ink); font: 600 16px/24px var(--serif); }
+
+.status { margin-top: 56px; border-top: 1px solid var(--rule); }
+.status .wrap { display: flex; flex-wrap: wrap; gap: 8px 28px; padding-top: 16px; padding-bottom: 32px; font: 400 14px/20px var(--sans); color: var(--print); }
+.mock-tools { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.mock-tools button { border: 0; padding: 0; background: none; color: var(--print); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.mock-tools button[aria-pressed="true"] { color: var(--ink); font-weight: 600; text-decoration: none; }
+
+/* ------------------------------------------------------------ narrow screens */
+@media (max-width: 960px) {
+  .instrument { grid-template-columns: minmax(0, 1fr); }
+  .spine { height: 9px; margin: 36px 0 32px; background: radial-gradient(circle, var(--rule-strong) 1.4px, transparent 1.8px) left center / 9px 8px repeat-x; }
+}
+@media (max-width: 760px) {
+  .wrap { padding: 0 16px; }
+  .account dl { gap: 8px 24px; padding-top: 20px; }
+  .kv dd { font-size: 16px; }
+  .kv.lead dd { font-size: 20px; line-height: 28px; }
+  .register { gap: 1px; }
+  .forms { grid-template-columns: minmax(0, 1fr); }
+  .ticket { padding: 28px 16px 16px; }
+  .ticket-serial { font-size: 36px; line-height: 40px; }
+  .ticket .printed { font-size: 14px; }
+  table.lanes, .lanes tbody, .lanes tr.voucher, .lanes tr.voucher > td, .lanes tr.ruled, .lanes tr.ruled > td { display: block; }
+  .lanes colgroup, .lanes thead { display: none; }
+  .lanes tr.lane-row {
+    position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; row-gap: 6px;
+    grid-template-areas: "lane leaf" "action action" "amount gas" "status status"; padding: 16px 0; border-bottom: 1px solid var(--rule);
+  }
+  .lanes tr.lane-row > td { display: block; padding: 0; border: 0; }
+  .lanes td.c-lane { grid-area: lane; } .lanes td.c-leaf { grid-area: leaf; padding-right: 112px; }
+  .lanes td.c-action { grid-area: action; } .lanes td.c-amount { grid-area: amount; text-align: left; }
+  .lanes td.c-gas { grid-area: gas; text-align: right; } .lanes td.c-status { grid-area: status; }
+  .lanes td.c-leaf::before, .lanes td.c-gas::before { font: 400 14px/24px var(--sans); color: var(--print); }
+  .lanes td.c-leaf::before { content: "leaf "; } .lanes td.c-gas::before { content: "gas "; }
+  .amt .pad { display: none; }
+  .st { display: block; }
+  .st-mark { position: absolute; top: 14px; right: 2px; }
+  .voucher-body { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation: none !important; transition: none !important; }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <a class="brand" href="#" data-mock-link>Winterlock</a>
+    <nav class="screens" aria-label="Screens">
+      <a href="#" aria-current="page" data-mock-link>Hot and cold</a>
+      <a href="#" data-mock-link>Agent</a>
+      <a href="#" data-mock-link>Session</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="banner" class="banner" role="alert" hidden><span id="banner-text"></span><button class="btn" type="button" id="banner-retry">Try again</button></div>
+  <section id="wallet-head" class="account" aria-label="Wallet"></section>
+  <p id="notice" class="notice" role="status" aria-live="polite"></p>
+</div>
+
+<main class="wrap">
+  <fieldset class="scene" id="scene-fields">
+    <button class="btn" type="button" id="play">Play scene</button>
+    <p class="hint">The cold device cuts tickets if the phone has fewer than 7, then goes offline; the phone pays three times on the alt mempool as parallel lanes, the third one the stuck payment (a 4-second first deadline, so it misses its block); then the mempool switches to public (one pending per sender, not yet confirmed on the devnet) and the phone pays three more times, each shown admitted or refused.</p>
+  </fieldset>
+
+  <div class="instrument">
+    <section class="pane cold" id="cold-pane" aria-labelledby="cold-title">
+      <div class="pane-head">
+        <h2 id="cold-title">Cold device</h2>
+        <label class="toggle"><input type="checkbox" id="offline"> Offline</label>
+      </div>
+      <fieldset class="cold-body" id="cold-fields">
+        <div class="tree">
+          <h3>Key tree</h3>
+          <div class="register" id="register" role="img"></div>
+          <ul class="legend" aria-hidden="true">
+            <li><i class="cell c-burned"></i>burned</li>
+            <li><i class="cell c-flight"></i>in flight</li>
+            <li><i class="cell c-phone"></i>on the phone</li>
+            <li><i class="cell c-hot"></i>hot band, not cut</li>
+            <li><i class="cell"></i>unused</li>
+          </ul>
+          <dl class="facts-inline" id="tree-summary"></dl>
+        </div>
+        <div class="forms">
+          <form id="transfer-form" class="group" novalidate>
+            <h3>Transfer</h3>
+            <p class="hint">Large transfers go through the cold device: a keyed lane on the next cold leaf, to any address, no cap.</p>
+            <label class="field"><span class="label">To</span><input type="text" id="transfer-to" autocomplete="off" spellcheck="false" placeholder="0x…" value="0x5544e0A9b7C3d1F2a4B6c8D0e2F4a6B8c0D216f9"></label>
+            <div class="row">
+              <label class="field"><span class="label">Amount, ETH</span><input type="text" id="transfer-amount" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.05"></label>
+              <button class="btn primary" id="transfer" type="submit">Send from cold</button>
+            </div>
+            <span class="problem" id="transfer-problem" hidden></span>
+          </form>
+          <form id="policy-form" class="group" novalidate>
+            <h3>Hot policy</h3>
+            <div class="row">
+              <label class="field"><span class="label">Value cap, ETH</span><input type="text" id="policy-value" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+              <label class="field"><span class="label">Fee cap, ETH</span><input type="text" id="policy-fee" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+            </div>
+            <label class="field"><span class="label">Allowed target</span><input type="text" id="policy-target" autocomplete="off" spellcheck="false"></label>
+            <label class="field"><span class="label">Hot start (first hot leaf)</span><input type="number" id="policy-start" min="1" step="1"><span class="hint">Kept or lowered, never raised within an epoch.</span></label>
+            <div class="row"><button class="btn primary" id="policy-set" type="submit">Set policy</button><span class="hint">A value cap of 0 is the kill switch for every ticket.</span></div>
+          </form>
+          <form id="cut-form" class="group" novalidate>
+            <h3>Tickets for the phone</h3>
+            <p class="hint" id="cut-left"></p>
+            <div class="row">
+              <label class="field"><span class="label">Count</span><input type="number" id="cut-count" min="1" max="64" step="1"></label>
+              <button class="btn" id="cut" type="submit">Cut tickets</button>
+            </div>
+          </form>
+          <form id="rotate-form" class="group" novalidate>
+            <h3>Rotation</h3>
+            <p class="warning">Rotation invalidates every pending lane.</p>
+            <div class="row">
+              <label class="field"><span class="label">New tree height</span><input type="number" id="rotate-height" min="2" max="12" step="1"></label>
+              <button class="btn" id="rotate" type="submit">Rotate root</button>
+            </div>
+            <p class="hint">The backend refuses to rotate while a lane is in flight; the wallet moves to the new epoch once the rotation is included.</p>
+          </form>
+        </div>
+      </fieldset>
+    </section>
+
+    <div class="spine" aria-hidden="true"></div>
+
+    <section class="pane phone" id="phone-pane" aria-labelledby="phone-title">
+      <div class="pane-head">
+        <h2 id="phone-title">Phone</h2>
+        <p>the backend's ticket device: signs from its ticket files, never from the seed</p>
+      </div>
+      <fieldset class="phone-body" id="phone-fields">
+        <p class="count" id="ticket-count"><span class="roll" id="count-n">3</span><span id="count-of"> of 10</span></p>
+        <p class="hint count-note" id="ticket-note">tickets left of those cut; 7 used or burned</p>
+        <p class="warning" id="device-issue" role="status" hidden></p>
+        <ol class="stubs" id="stubs" aria-label="Tickets cut to the phone"></ol>
+        <form id="pay-form" novalidate>
+          <div class="ticket" id="ticket">
+            <div class="ticket-head">
+              <p class="ticket-serial"><span class="vh">Next ticket, leaf </span><span class="roll" id="ticket-serial">1015</span></p>
+              <p class="ticket-kind">hot ticket</p>
+            </div>
+            <label class="field"><span class="label">To, the allowed target</span><input type="text" class="printed" id="pay-to" readonly></label>
+            <label class="field"><span class="label">Amount, ETH</span>
+              <span class="amount-box"><input type="text" id="pay-amount" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.001" aria-describedby="pay-cap pay-problem"></span>
+              <span class="hint" id="pay-cap"></span><span class="problem" id="pay-problem" hidden></span></label>
+            <p class="micr" id="micr"></p>
+          </div>
+          <div class="row pay-row">
+            <button class="btn primary" id="pay" type="submit">Pay</button>
+            <button class="btn" id="stuck" type="button">Simulate stuck payment</button>
+          </div>
+          <p class="hint pay-hint">The stuck payment's first try gets only 4 seconds, less than one 6-second block of the devnet, so it misses its block and expires: its ticket is burned. Then one retry goes out on a fresh lane with the normal deadline (90 s). Both offer the market's fee. A low fee would not make it stuck: on this devnet a fee below the 7-wei base fee is refused at admission, and any fee above it is included. The expired leaf is never re-signed and never fee-bumped.</p>
+        </form>
+        <p class="set-aside" id="phone-set-aside"></p>
+      </fieldset>
+    </section>
+  </div>
+
+  <section class="board" aria-labelledby="board-title">
+    <div class="board-head">
+      <h2 id="board-title">Lane board</h2>
+      <div class="mempool">
+        <span id="mempool-label">Mempool</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="mempool-label">
+          <label><input type="radio" name="mempool" value="alt" checked><span>alt</span></label>
+          <label><input type="radio" name="mempool" value="public"><span>public</span></label>
+        </div>
+      </div>
+    </div>
+    <p id="set-aside" class="set-aside"></p>
+    <div class="table-wrap" id="lanes">
+      <table class="lanes">
+        <caption class="vh">Lanes: one row per transaction, newest first. Select a row for its admission report.</caption>
+        <colgroup><col class="w-lane"><col class="w-leaf"><col><col class="w-amount"><col class="w-gas"><col class="w-status"></colgroup>
+        <thead><tr><th scope="col">Lane</th><th scope="col">Leaf</th><th scope="col">Action</th><th scope="col" class="r">Amount</th><th scope="col" class="r">Gas</th><th scope="col">Status</th></tr></thead>
+        <tbody id="lanes-body"></tbody>
+      </table>
+    </div>
+    <p id="lane-limits" class="lane-limits">Parallel lanes on the devnet's sidecar: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself, relayed at most 4 per 10 s pass by default, so 8 lanes land over two or more blocks. (The ERC-8421 draft's numbers, 4 per key and 64 per unstaked sender, are the draft's, not the devnet's.) The public mempool holds one pending per sender: not yet confirmed on the devnet.</p>
+  </section>
+</main>
+
+<footer class="status" id="status" aria-label="Status">
+  <div class="wrap">
+    <span>backend (via this server)</span>
+    <span>chain 1337</span>
+    <span class="num" id="st-block"></span>
+    <span>Prototype. Mempool and chain simulated in page.</span>
+    <span class="mock-tools" role="group" aria-label="Mock only: theme">Theme
+      <button type="button" data-theme-set="auto">auto</button>
+      <button type="button" data-theme-set="light">light</button>
+      <button type="button" data-theme-set="dark">dark</button>
+    </span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
+  const params = new URLSearchParams(location.search);
+  if (params.get("theme") === "dark" || params.get("theme") === "light") root.dataset.theme = params.get("theme");
+  if (params.get("motion") === "reduce") root.classList.add("reduce-motion");
+  const reduceMQ = matchMedia("(prefers-reduced-motion: reduce)");
+  const reduced = () => reduceMQ.matches || root.classList.contains("reduce-motion");
+  const later = (ms, fn) => setTimeout(fn, ms);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---------------------------------------------------------- amounts, in the screens' format.js rules
+  const WEI = 10n ** 18n, GWEI = 10n ** 9n;
+  const group = (n) => BigInt(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  function parseEth(text) {
+    const m = /^\s*(\d*)(?:\.(\d*))?\s*$/.exec(String(text));
+    if (!m) return null;
+    const whole = m[1] ?? "", frac = m[2] ?? "";
+    if ((whole === "" && frac === "") || frac.length > 18) return null;
+    return BigInt(whole || "0") * WEI + BigInt(frac.padEnd(18, "0") || "0");
+  }
+  const eth = (s) => /** @type {bigint} */ (parseEth(s));
+  function roundWei(a) {
+    if (a < GWEI) return a;
+    const zeros = a >= WEI ? 0 : 18 - a.toString().length;
+    const drop = 18 - Math.min(18, zeros + 6);
+    if (drop <= 0) return a;
+    const unit = 10n ** BigInt(drop);
+    return ((a + unit / 2n) / unit) * unit;
+  }
+  function digits(a) {
+    const frac = a % WEI;
+    return `${group(a / WEI)}${frac === 0n ? "" : "." + frac.toString().padStart(18, "0").replace(/0+$/, "")}`;
+  }
+  const formatWei = (v) => (v === 0n ? "0 ETH" : v < GWEI ? `${group(v)} wei` : `${digits(roundWei(v))} ETH`);
+  const isAddress = (s) => /^0x[0-9a-fA-F]{40}$/.test(s);
+
+  // ---------------------------------------------------------- small helpers
+  let seed = 0x5eed1015;
+  const rand = () => { seed ^= seed << 13; seed >>>= 0; seed ^= seed >>> 17; seed ^= seed << 5; seed >>>= 0; return seed / 4294967296; };
+  const hex = (n) => Array.from({ length: n }, () => "0123456789abcdef"[Math.floor(rand() * 16)]).join("");
+  const short = (a, h = 4, t = 4) => (a.length <= 2 + h + t + 1 ? a : `${a.slice(0, 2 + h)}…${a.slice(-t)}`);
+  const laneOf = (epoch, leaf) => "0x" + ((BigInt(epoch) << 32n) | BigInt(leaf)).toString(16);
+  const offset = (ms) => { const s = Math.max(0, ms) / 1000; return s < 10 ? `+${s.toFixed(1)} s` : `+${Math.round(s)} s`; };
+  const clock = (t) => new Date(t).toLocaleTimeString("en-GB", { hour12: false });
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === undefined || v === null || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? "" : String(v));
+    }
+    for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false) n.append(kid);
+    return n;
+  }
+  const kv = (label, value, cls, title) => el("div", { class: cls ? `kv ${cls}` : "kv" }, el("dt", { text: label }), el("dd", { text: value, title }));
+  /** replaceChildren without the absent parts (replaceChildren would print a null as the text "null") */
+  const put = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
+
+  // ---------------------------------------------------------- the mock wallet
+  const A = {
+    wallet: "0x66a503B8c1F2e4D7a9C0b3E6f5A8d2C4e7b1D38A",
+    target: "0x2c58A1F4e9B03d7C6a5E2f8D1b4C9e0A7f36C537",
+    payee: "0x5544e0A9b7C3d1F2a4B6c8D0e2F4a6B8c0D216f9",
+    stranger: "0x53c9F0e1D2c3B4a5968778695a4b3c2d1e0f6356",
+  };
+  const S = {
+    epoch: 0, height: 10, hotStart: 1008, root: "0x5d1e" + hex(56) + "a9c3",
+    balance: 9947698000000000000n, valueCap: eth("0.01"), feeCap: eth("0.002"), target: A.target,
+    leaf: new Map(), // leaf -> "burned" | "flight" | "phone"; the cold journal counts every key it holds
+    exported: [], lanes: [], mempool: "alt",
+    head: 408312, headAt: Date.now() - 2000,
+    delays: [5200, 3700, 7300, 4400, 6600, 3900, 5800, 7700, 4800, 6200], d: 0,
+    hotGas: [87412, 88019, 86977, 87028, 88264, 87655, 86890, 87931], coldGas: [86118, 85731, 86402], g: 0,
+  };
+  const leafCount = () => 2 ** S.height;
+  const pending = (l) => l.status === "admitted";
+  const finalState = (l) => l.status === "included" || l.status === "refused" || l.status === "expired";
+  const ticketsLeft = () => S.exported.filter((l) => S.leaf.get(l) === "phone");
+  function uncutHot() { const out = []; for (let i = S.hotStart; i < leafCount(); i++) if (!S.leaf.has(i)) out.push(i); return out; }
+  function nextCold() { for (let i = S.epoch === 0 ? 1 : 0; i < S.hotStart; i++) if (!S.leaf.has(i)) return i; return undefined; }
+
+  let laneSeq = 0;
+  function lane(o) {
+    const l = {
+      id: `ln${++laneSeq}`, epoch: S.epoch, leaf: o.leaf, mode: o.mode, kind: o.kind ?? "pay", to: o.to ?? null,
+      value: o.value ?? 0n, gas: o.gas ?? null, mempool: o.mempool ?? "alt", status: o.status ?? "admitted",
+      steps: o.steps ?? [{ key: "admitted", at: 0 }], t0: o.t0 ?? Date.now(), deadline: o.deadline ?? null,
+      block: o.block ?? null, reason: o.reason ?? null, code: o.code ?? null, retryOf: o.retryOf ?? null, retriedAs: null,
+      maxCost: o.maxCost ?? eth("0.000219"), hash: "0x" + hex(64), fresh: !!o.fresh, landing: false, drawRule: false,
+      policy: o.policy ?? null, rotate: o.rotate ?? null,
+    };
+    l.lane = laneOf(l.epoch, l.leaf);
+    return l;
+  }
+
+  // the state the brief describes: 10 tickets cut (1008 to 1017), 7 of them used, leaf 1 included, leaf 2 in flight
+  const now = Date.now();
+  S.leaf.set(1, "burned").set(2, "flight");
+  for (let leaf = 1008; leaf <= 1017; leaf++) { S.exported.push(leaf); S.leaf.set(leaf, leaf <= 1014 ? "burned" : "phone"); }
+  const ago = (block, extra) => now - (S.head - block) * 6000 - extra;
+  const landed = (leaf, v, gas, block, p, i) => lane({ leaf, mode: "hot", to: A.target, value: eth(v), gas, status: "included", block, t0: ago(block, i),
+    steps: [{ key: "admitted", at: 0 }, { key: "pending", at: p }, { key: "included", at: i }] });
+  const inFlight = lane({ leaf: 2, mode: "keyed", to: A.payee, value: eth("0.25"), gas: 85904, t0: now - 2400, deadline: now - 2400 + 90000,
+    steps: [{ key: "admitted", at: 0 }, { key: "pending", at: 1100 }], maxCost: eth("0.00023") });
+  S.lanes.push(
+    inFlight,
+    lane({ leaf: 1014, mode: "hot", to: A.stranger, value: eth("0.001"), status: "refused", reason: "target not allowed", code: "account: hot: frame target", t0: now - 118000, steps: [{ key: "refused", at: 0 }] }),
+    lane({ leaf: 1013, mode: "hot", to: A.target, value: eth("0.1"), status: "refused", reason: "exceeds value cap", code: "account: hot: value cap", t0: now - 131000, steps: [{ key: "refused", at: 0 }] }),
+    landed(1012, "0.01", 88019, 408215, 1000, 6200),
+    landed(1011, "0.01", 88019, 408214, 900, 5900),
+    landed(1010, "0.001", 87028, 408213, 1100, 4300),
+    landed(1009, "0.01", 88019, 408214, 1000, 9600),
+    landed(1008, "0.001", 87028, 408201, 1000, 5800),
+    lane({ leaf: 1, mode: "keyed", to: A.payee, value: eth("0.01"), gas: 86353, status: "included", block: 408190, t0: ago(408190, 6100), maxCost: eth("0.00023"),
+      steps: [{ key: "admitted", at: 0 }, { key: "pending", at: 1200 }, { key: "included", at: 6100 }] }),
+  );
+
+  // ---------------------------------------------------------- drawing
+  function notice(text, tone, at = Date.now()) {
+    $("notice").replaceChildren(el("span", { class: "when", text: clock(at) }), el("span", { class: tone === "error" ? "error" : undefined, text }));
+  }
+
+  function roll(node, text, animate) {
+    const cur = node.dataset.v ?? node.textContent;
+    node.dataset.v = text;
+    if (cur === text) { if (node.textContent !== text) node.textContent = text; return; }
+    if (!animate || reduced()) { node.textContent = text; return; }
+    const out = el("span", { text: cur, "aria-hidden": "true", style: "position:absolute;left:0;top:0" });
+    const inn = el("span", { text });
+    node.replaceChildren(inn, out);
+    const opts = { duration: 240, easing: "cubic-bezier(.2,.7,.2,1)" };
+    out.animate([{ transform: "translateY(0)" }, { transform: "translateY(-100%)" }], opts).finished.then(() => out.remove(), () => out.remove());
+    inn.animate([{ transform: "translateY(100%)" }, { transform: "translateY(0)" }], opts);
+  }
+
+  function renderHead() {
+    $("wallet-head").replaceChildren(el("dl", {},
+      kv("wallet", short(A.wallet, 6, 4), "", A.wallet),
+      kv("balance", formatWei(S.balance), "lead"),
+      kv("epoch", String(S.epoch)),
+      kv("leaves used", `${S.leaf.size} of ${group(leafCount())}`),
+      kv("lanes in flight", String(S.lanes.filter(pending).length)),
+      kv("tickets", `${ticketsLeft().length} of ${S.exported.length}`)));
+  }
+
+  let built = 0;
+  function renderRegister(anim) {
+    const reg = $("register"), n = leafCount();
+    if (built !== n) { reg.replaceChildren(...Array.from({ length: n }, () => el("i", { class: "cell" }))); built = n; }
+    const count = { burned: 0, flight: 0, phone: 0, hot: 0, unused: 0 };
+    for (let i = 0; i < n; i++) {
+      const st = S.leaf.get(i);
+      let c = "cell";
+      if (st === "burned") { c += " c-burned"; count.burned++; }
+      else if (st === "flight") { c += " c-flight"; count.flight++; }
+      else if (st === "phone") { c += " c-phone"; count.phone++; }
+      else if (i >= S.hotStart) { c += " c-hot"; count.hot++; }
+      else count.unused++;
+      if (!reduced() && anim.fill?.includes(i)) c += " c-fill";
+      if (!reduced() && anim.cut?.includes(i)) c += " c-cut";
+      if (reg.children[i].className !== c) reg.children[i].className = c;
+    }
+    reg.setAttribute("aria-label", `Key tree register, ${n} leaves: ${count.burned} burned, ${count.flight} in flight, ${count.phone} on the phone, ${count.hot} in the hot band not cut, ${count.unused} unused.`);
+  }
+
+  const dirty = new Set();
+  const prefill = (id, v) => { const i = $(id); if (!dirty.has(i) && document.activeElement !== i) i.value = v; };
+  const ethInput = (w) => digits(w);
+  function renderCold(anim) {
+    const n = leafCount(), hot = n - S.hotStart, uncut = uncutHot().length;
+    $("tree-summary").replaceChildren(
+      kv("height", String(S.height)), kv("epoch", String(S.epoch)),
+      kv("leaves used", `${S.leaf.size} of ${group(n)}`),
+      kv("hot band", hot > 0 ? `leaves ${S.hotStart} to ${n - 1} (${hot})` : "none"),
+      kv("root", short(S.root, 4, 4), "", S.root));
+    renderRegister(anim);
+    $("cut-left").textContent = `${uncut} hot ${uncut === 1 ? "leaf" : "leaves"} not cut yet; ${S.exported.length} cut this epoch. Each ticket is one leaf's secrets and path, no seed.`;
+    $("cut").disabled = uncut === 0;
+    $("cut-count").max = String(Math.max(1, Math.min(64, uncut)));
+    prefill("cut-count", String(Math.max(1, Math.min(10, uncut))));
+    prefill("policy-value", ethInput(S.valueCap));
+    prefill("policy-fee", ethInput(S.feeCap));
+    prefill("policy-target", S.target);
+    prefill("policy-start", String(S.hotStart));
+    prefill("rotate-height", String(S.height));
+  }
+
+  const ONUS = '<svg viewBox="0 0 12 14" aria-hidden="true"><rect x="0" y="4" width="3" height="6"/><rect x="5" y="0" width="2" height="14"/><rect x="9" y="4" width="3" height="6"/></svg>';
+  const TRANSIT = '<svg viewBox="0 0 10 14" aria-hidden="true"><rect x="0" y="0" width="2.5" height="14"/><rect x="5" y="1" width="5" height="5"/><rect x="5" y="8" width="5" height="5"/></svg>';
+  function renderPhone(anim) {
+    const left = ticketsLeft(), total = S.exported.length, next = left[0];
+    roll($("count-n"), String(left.length), anim.count);
+    $("count-of").textContent = ` of ${total}`;
+    $("ticket-note").textContent = total === 0 ? "no tickets yet: cut some on the cold device" : `tickets left of those cut; ${total - left.length} used or burned`;
+    const ol = $("stubs");
+    ol.hidden = total === 0;
+    ol.replaceChildren(...S.exported.map((leaf) => {
+      const st = S.leaf.get(leaf), fresh = !reduced() && anim.fresh?.includes(leaf);
+      const cls = ["stub", st === "burned" ? "burned" : st === "flight" ? "flight" : "", leaf === next ? "next" : "", fresh ? "fresh" : ""].filter(Boolean).join(" ");
+      const words = st === "burned" ? "burned" : st === "flight" ? "in flight" : leaf === next ? "next ticket" : "left";
+      return el("li", { class: cls, style: fresh ? `--i:${anim.fresh.indexOf(leaf)}` : undefined }, el("span", { text: String(leaf) }), el("span", { class: "vh", text: `, ${words}` }));
+    }));
+    $("ticket").classList.toggle("empty", next === undefined);
+    roll($("ticket-serial"), next === undefined ? "none left" : String(next), anim.serial);
+    const micr = $("micr");
+    if (next === undefined) micr.replaceChildren(el("span", { class: "micr-empty", text: "No ticket left: cut some on the cold device." }));
+    else {
+      const ln = laneOf(S.epoch, next);
+      micr.innerHTML = `<span aria-hidden="true">${ONUS}${ln}${ONUS}</span><span aria-hidden="true">${TRANSIT}1337${TRANSIT}</span><span aria-hidden="true">${short(A.wallet, 6, 4)}${ONUS}</span>`;
+      micr.append(el("span", { class: "vh", text: `This ticket pays on lane ${ln}, chain 1337, from wallet ${short(A.wallet, 6, 4)}.` }));
+    }
+    $("pay-to").value = S.target;
+    const cap = $("pay-cap");
+    cap.textContent = `Hot value cap ${formatWei(S.valueCap)} per payment, fee cap ${formatWei(S.feeCap)}.`;
+    if (anim.reprint && !reduced()) { cap.classList.remove("reprint"); void cap.offsetWidth; cap.classList.add("reprint"); }
+    checkAmount();
+  }
+
+  function checkAmount() {
+    const input = $("pay-amount"), wei = parseEth(input.value);
+    const err = wei === null ? "an amount in ETH, at most 18 decimals"
+      : wei === 0n ? "more than 0"
+      : S.valueCap === 0n ? "hot tickets are off: the value cap is 0 (the kill switch)"
+      : wei > S.valueCap ? `above the hot value cap of ${formatWei(S.valueCap)}; the account refuses it too` : null;
+    $("pay-problem").hidden = !err;
+    $("pay-problem").textContent = err ?? "";
+    input.setAttribute("aria-invalid", String(!!err));
+    const none = ticketsLeft().length === 0;
+    $("pay").disabled = !!err || none;
+    $("stuck").disabled = !!err || none;
+    return err ? null : wei;
+  }
+
+  function setAsideText() {
+    const p = S.lanes.filter(pending);
+    if (!p.length) return "set aside for pending: nothing, no lane in flight";
+    const total = p.reduce((a, l) => a + l.value + l.maxCost, 0n);
+    return `set aside for pending: ${formatWei(total)} on ${p.length} lane${p.length === 1 ? "" : "s"} (${p.length === 1 ? "its value" : "each lane's value"} plus the maximum cost the backend reports: what the sidecar sets aside)`;
+  }
+
+  // the board: rows keyed by lane, newest first; a row's stamp is made once, when its lane becomes final
+  const rows = new Map();
+  let openId = null;
+  const byId = (id) => S.lanes.find((l) => l.id === id);
+  const STEP = { admitted: "admitted", pending: "pending", included: "included", refused: "refused", expired: "expired, leaf burned", retried: "retried on a fresh lane" };
+  const WORDS = { admitted: "admitted", included: "included", refused: "refused, leaf burned", expired: "expired, leaf burned" };
+  const fracLen = (v) => { const s = digits(roundWei(v)), i = s.indexOf("."); return i < 0 ? 0 : s.length - i - 1; };
+  const expiryText = (d) => `expiry in ${Math.max(0, Math.ceil((d - Date.now()) / 1000))} s`;
+
+  function buildRow(l) {
+    if (l.kind === "sep") {
+      const tr = el("tr", { class: "ruled" }, el("td", { colspan: "6", text: l.text }));
+      return { tr, voucher: null };
+    }
+    const tr = el("tr", { class: "lane-row", tabindex: "0", "aria-expanded": "false", title: "Show the admission report" });
+    const c = {
+      lane: el("td", { class: "c-lane" }, el("span", { class: "sn", text: l.lane })),
+      leaf: el("td", { class: "c-leaf" }, el("span", { class: "sn", text: String(l.leaf) }), l.mode === "hot" ? el("span", { class: "tag hot", text: "hot" }) : null),
+      action: el("td", { class: "c-action" }), amount: el("td", { class: "c-amount r" }),
+      gas: el("td", { class: "c-gas r num", title: "verify-frame gas" }), status: el("td", { class: "c-status" }),
+    };
+    const words = el("div", { class: "st-main" }), mark = el("div", { class: "st-mark" });
+    c.status.append(el("div", { class: "st" }, words, mark));
+    tr.append(c.lane, c.leaf, c.action, c.amount, c.gas, c.status);
+    tr.addEventListener("click", (e) => { if (!e.target.closest("a, button")) toggle(l.id); });
+    tr.addEventListener("keydown", (e) => { if (e.target === tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(l.id); } });
+    if (l.fresh && !reduced()) { tr.classList.add("writing"); later(1200, () => tr.classList.remove("writing")); }
+    return { tr, c, words, mark, stamp: null, voucher: null };
+  }
+
+  function renderBoard() {
+    const body = $("lanes-body");
+    const maxFrac = Math.max(0, ...S.lanes.filter((l) => l.kind !== "sep").map((l) => fracLen(l.value)));
+    let anchor = null;
+    for (const l of S.lanes) {
+      let r = rows.get(l.id);
+      if (!r) { r = buildRow(l); rows.set(l.id, r); }
+      if (l.kind !== "sep") fillRow(r, l, maxFrac);
+      l.fresh = false;
+      const want = anchor ? anchor.nextSibling : body.firstChild;
+      if (r.tr !== want) body.insertBefore(r.tr, want);
+      anchor = r.tr;
+      if (r.voucher) { if (anchor.nextSibling !== r.voucher) body.insertBefore(r.voucher, anchor.nextSibling); anchor = r.voucher; }
+    }
+  }
+
+  function fillRow(r, l, maxFrac) {
+    const action = l.kind === "policy" ? "set hot policy" : l.kind === "rotate" ? "rotate root" : l.mode === "hot" ? `hot ticket to ${short(l.to)}` : `pay ${short(l.to)}`;
+    const links = [];
+    if (l.retryOf) { const o = byId(l.retryOf); links.push(linkTo(`retry of lane ${o.lane}`, o.id, "not re-signed: a fresh leaf on a fresh lane")); }
+    if (l.retriedAs) { const o = byId(l.retriedAs); links.push(linkTo(`retried as lane ${o.lane}`, o.id)); }
+    put(r.c.action, el("span", { text: action }), el("span", { class: `tag ${l.mempool}`, text: l.mempool }), links.length ? el("div", { class: "links" }, ...links) : null);
+
+    const fig = digits(roundWei(l.value)), have = fracLen(l.value), padN = maxFrac - have;
+    const pad = padN > 0 ? (have === 0 ? "." : "") + "0".repeat(padN) : "";
+    const amtCls = ["amt", l.status === "included" ? "final" : "", l.status === "refused" || l.status === "expired" ? "void" : "", l.drawRule && !reduced() ? "draw" : ""].filter(Boolean).join(" ");
+    r.c.amount.replaceChildren(el("span", { class: amtCls, title: l.status === "included" ? "included: the money moved" : finalState(l) ? "no money moved" : "pending" },
+      el("span", { class: "fig", text: fig }), el("span", { class: "pad", "aria-hidden": "true", text: pad }), el("span", { class: "unit", text: "ETH" })));
+    l.drawRule = false;
+    r.c.gas.textContent = l.gas ? group(l.gas) : "—";
+
+    const ticks = el("ol", { class: "ticks", "aria-label": "timeline" });
+    l.steps.forEach((s, i) => {
+      const li = el("li", { class: [s.key === "refused" || s.key === "expired" ? "x" : "", i === l.steps.length - 1 ? "now" : ""].filter(Boolean).join(" ") || undefined }, STEP[s.key]);
+      if (i > 0) li.append(" ", el("span", { class: "t", text: offset(s.at) }));
+      if (s.key === "included" && l.block) li.title = `block ${group(l.block)}, also on the stamp`;
+      ticks.append(li);
+    });
+    if (pending(l) && l.deadline) ticks.append(el("li", { class: "wait" }, el("span", { "data-deadline": String(l.deadline), text: expiryText(l.deadline) })));
+    put(r.words, el("p", { class: "st-words" }, el("span", { text: WORDS[l.status] }), el("a", { class: "explorer", href: "#", "data-explorer": l.lane, text: "explorer" })),
+      l.reason ? el("p", { class: "st-reason" }, `${l.reason} `, el("span", { class: "code", text: `(${l.code})` })) : null, ticks);
+
+    if (finalState(l) && !r.stamp) {
+      const rot = ((l.leaf * 37) % 7) - 4, dx = ((l.leaf * 13) % 5) - 2;
+      r.stamp = el("span", { class: "stamp", style: `--rot:${rot}deg;--dx:${dx}px`,
+        title: l.status === "included" ? "The chain consumed this lane's nonce key: the leaf can never sign again." : "It never reached the chain: the signer journals the leaf as burned and never signs with it again." },
+        "burned", el("small", { text: l.status === "included" ? `in block ${group(l.block)}` : "by the signer" }));
+      r.mark.append(r.stamp);
+      if (l.landing && !reduced()) { const s = r.stamp; s.classList.add("landing"); s.addEventListener("animationend", () => s.classList.remove("landing"), { once: true }); }
+    }
+    l.landing = false;
+
+    const open = openId === l.id;
+    r.tr.classList.toggle("open", open);
+    r.tr.setAttribute("aria-expanded", String(open));
+    if (open) { r.voucher ??= el("tr", { class: "voucher" }); r.voucher.replaceChildren(el("td", { colspan: "6" }, voucher(l))); }
+    else if (r.voucher) { r.voucher.remove(); r.voucher = null; }
+  }
+
+  function linkTo(text, id, title) {
+    return el("button", { type: "button", class: "link", title, text, onclick: () => { openId = null; toggle(id); const tr = rows.get(id)?.tr; tr?.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" }); tr?.focus({ preventScroll: true }); } });
+  }
+  function toggle(id) { openId = openId === id ? null : id; renderBoard(); }
+
+  function voucher(l) {
+    const sec = (title, ...kids) => el("div", {}, el("h4", { text: title }), ...kids);
+    const out = [];
+    if (l.status === "refused") out.push(sec("Refused because", el("ul", {}, el("li", { text: l.code }),
+      el("li", { text: l.mempool === "public" ? "the public mempool holds one pending frame transaction per sender" : "validation frame 1, the self verify, reverted before it approved" }))));
+    if (l.status === "expired") out.push(sec("Why", el("ul", {}, el("li", { text: "its deadline passed before a block included it: expired, leaf burned" }), el("li", { text: "never fee-bumped and never re-signed: the retry is a fresh leaf on a fresh lane" }))));
+    if (l.mempool === "public") out.push(sec("Admission report", el("p", { text: "none: the public mempool keeps no admission record" })));
+    else {
+      const checks = [
+        ["pass", "prefix shape: expiry, self verify"],
+        ["pass", "validation gas: 95,000 declared plus 100 for the signature, within 100,000"],
+        ["pass", `nonce key ${l.lane} unused, sequence 0`],
+        ["pass", "verify-frame opcodes and storage reads"],
+        l.status === "refused" ? ["fail", `validation frame 1 reverted: ${String(l.code).replace("account: ", "")}`] : ["pass", `verify frame approved with ${group(l.gas)} gas`],
+        ["pass", "balance covers every pending lane's maximum cost and value"],
+      ];
+      out.push(sec("Admission report", el("p", { text: l.status === "refused" ? "refused at admission by the alt mempool" : "admitted by the alt mempool: 6 of 6 checks passed" }),
+        el("ul", { class: "checks" }, ...checks.map(([v, t]) => el("li", { class: v === "fail" ? "fail" : undefined }, el("span", { class: "v", text: v }), el("span", { text: t }))))));
+    }
+    if (l.status === "included") out.push(sec("Receipt", el("p", { class: "num", text: `block ${group(l.block)}, success, gas used ${group(186000 + (l.gas % 9000))}` }),
+      el("ol", { start: "0" }, el("li", { text: "frame 0 expiry: success" }), el("li", { text: `frame 1 verify: success, ${group(l.gas)} gas` }), el("li", { text: `frame 2 sender: success` }))));
+    out.push(sec("Timeline", el("ol", { class: "raw" }, ...l.steps.map((s) => el("li", {}, el("span", { class: "t", text: clock(l.t0 + s.at) }), ` ${STEP[s.key]}`)))));
+    out.push(el("dl", { class: "vfacts" }, ...[
+      ["transaction", short(l.hash, 8, 6)], ["lane (nonce key)", l.lane], ["leaf", String(l.leaf)], ["mode", l.mode], ["mempool", l.mempool],
+      ["to", l.to ? short(l.to) : "the account itself"], ["verify gas", l.gas ? group(l.gas) : "—"], ["deadline", l.deadline ? clock(l.deadline) : "—"],
+      ["max cost (the backend's)", formatWei(l.maxCost)],
+    ].map(([k, v]) => kv(k, v))));
+    out.push(el("p", { class: "vlink" }, el("a", { href: "#", "data-explorer": l.lane, text: "Open in the explorer" }), " (its history is in memory: a restart clears it)"));
+    return el("div", { class: "voucher-body" }, ...out);
+  }
+
+  function renderFooter() { $("st-block").textContent = `latest block ${group(S.head)}, ${Math.max(0, Math.round((Date.now() - S.headAt) / 1000))} s ago`; }
+
+  function render(anim = {}) {
+    renderHead(); renderCold(anim); renderPhone(anim); renderBoard();
+    $("set-aside").textContent = setAsideText();
+    $("phone-set-aside").textContent = setAsideText();
+    renderFooter();
+  }
+
+  // ---------------------------------------------------------- the simulated mempool and chain
+  function schedule(l, stuck) {
+    later(900 + Math.round(rand() * 400), () => { if (pending(l)) { l.steps.push({ key: "pending", at: Date.now() - l.t0 }); render(); } });
+    if (stuck) later(4000 + 1600, () => expire(l));
+    else later(S.delays[S.d++ % S.delays.length], () => include(l));
+  }
+
+  function send(o, stuck = false) {
+    const t0 = Date.now();
+    const l = lane({ ...o, fresh: true, mempool: S.mempool, t0, deadline: t0 + (stuck ? 4000 : 90000) });
+    const busy = S.lanes.some(pending);
+    S.leaf.set(l.leaf, "flight");
+    S.lanes.unshift(l);
+    if (S.mempool === "public" && busy) {
+      // one pending frame transaction per sender: the second is refused at once, and its leaf is burned
+      Object.assign(l, { status: "refused", gas: null, deadline: null, reason: "one pending per sender", code: "public mempool: a pending frame transaction from this sender is already in the pool",
+        steps: [{ key: "refused", at: 0 }], landing: true });
+      S.leaf.set(l.leaf, "burned");
+    } else schedule(l, stuck);
+    return l;
+  }
+
+  function include(l) {
+    if (!pending(l)) return;
+    Object.assign(l, { status: "included", block: S.head, landing: true, drawRule: true });
+    l.steps.push({ key: "included", at: Date.now() - l.t0 });
+    S.leaf.set(l.leaf, "burned");
+    S.balance -= l.value + 1331174n;
+    if (l.policy) { Object.assign(S, l.policy); dirty.clear(); }
+    render({ fill: [l.leaf], reprint: !!l.policy });
+    if (l.rotate) later(900, () => rotated(l));
+  }
+
+  function expire(l) {
+    if (!pending(l)) return;
+    Object.assign(l, { status: "expired", landing: true, drawRule: true });
+    l.steps.push({ key: "expired", at: Date.now() - l.t0 });
+    S.leaf.set(l.leaf, "burned");
+    render({ fill: [l.leaf] });
+    later(800, () => {
+      const leaf = l.mode === "hot" ? ticketsLeft()[0] : nextCold();
+      if (leaf === undefined) { notice(`Lane ${l.lane} expired and leaf ${l.leaf} is burned. No ticket left for the retry: cut some on the cold device.`, "error"); return; }
+      l.steps.push({ key: "retried", at: Date.now() - l.t0 });
+      if (l.mode === "hot") tear();
+      const r = send({ leaf, mode: l.mode, to: l.to, value: l.value, gas: nextGas(l.mode), retryOf: l.id });
+      l.retriedAs = r.id;
+      render({ count: true, serial: true });
+      notice(`Lane ${l.lane} expired, leaf ${l.leaf} burned. Retried as lane ${r.lane} on a fresh leaf, ${leaf}; leaf ${l.leaf} is never signed again.`);
+    });
+  }
+
+  const nextGas = (mode) => (mode === "hot" ? S.hotGas : S.coldGas)[S.g++ % (mode === "hot" ? S.hotGas.length : S.coldGas.length)];
+
+  // the tear: the ticket lifts off along its perforation, the next one comes up under it
+  function tear() {
+    if (reduced()) return;
+    const t = $("ticket"), box = t.getBoundingClientRect();
+    if (box.bottom < 0 || box.top > innerHeight) return;
+    const ghost = /** @type {HTMLElement} */ (t.cloneNode(true));
+    ghost.removeAttribute("id");
+    const from = t.querySelectorAll("input"), to = ghost.querySelectorAll("input");
+    to.forEach((n, i) => { n.value = from[i].value; });
+    ghost.querySelectorAll("[id]").forEach((n) => n.removeAttribute("id"));
+    ghost.classList.add("ghost");
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.inert = true;
+    Object.assign(ghost.style, { position: "fixed", left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`, margin: "0", zIndex: "20", pointerEvents: "none" });
+    document.body.append(ghost);
+    ghost.animate([
+      { transform: "translate(0, 0) rotate(0deg)", opacity: 1 },
+      { transform: "translate(3px, -7px) rotate(-1.6deg)", opacity: 1, offset: 0.26 },
+      { transform: "translate(44px, -80px) rotate(-6deg)", opacity: 0 },
+    ], { duration: 500, easing: "cubic-bezier(.3,.6,.2,1)" }).finished.then(() => ghost.remove(), () => ghost.remove());
+    t.animate([{ transform: "translateY(12px)", opacity: 0.15 }, { transform: "translateY(0)", opacity: 1 }], { duration: 280, delay: 150, easing: "cubic-bezier(.2,.7,.2,1)", fill: "backwards" });
+  }
+
+  // ---------------------------------------------------------- actions
+  function pay(stuck = false) {
+    const wei = checkAmount();
+    if (wei === null) return null;
+    const leaf = ticketsLeft()[0];
+    if (leaf === undefined) { notice("Not sent: tickets_exhausted, the phone has no ticket left. Cut some on the cold device.", "error"); return null; }
+    tear();
+    const l = send({ leaf, mode: "hot", to: S.target, value: wei, gas: nextGas("hot") }, stuck);
+    render({ count: true, serial: true });
+    if (l.status === "refused") notice(`Refused: lane ${l.lane}, ticket ${leaf}. The public mempool holds one pending per sender; the leaf is burned.`, "error");
+    else if (stuck) notice(`Stuck payment on lane ${l.lane} (ticket ${leaf}): its first deadline is 4 s, shorter than one 6 s block, so it should miss its block and expire, its ticket burned; then one retry goes out on a fresh lane with the normal deadline.`);
+    else notice(`Paid ${formatWei(wei)} with ticket ${leaf} on lane ${l.lane}: admitted.`);
+    return l;
+  }
+
+  function cut(count) {
+    const take = uncutHot().slice(0, Math.max(1, count));
+    if (!take.length) { notice("No hot leaf left to cut this epoch: a rotation starts a new hot band.", "error"); return; }
+    const wasEmpty = ticketsLeft().length === 0;
+    for (const leaf of take) { S.exported.push(leaf); S.leaf.set(leaf, "phone"); }
+    dirty.delete($("cut-count"));
+    render({ cut: take, fresh: take, count: true, serial: wasEmpty });
+    notice(`Cut ${take.length} ticket${take.length === 1 ? "" : "s"} to the phone: leaves ${take[0]} to ${take[take.length - 1]}.`);
+  }
+
+  $("pay-form").addEventListener("submit", (e) => { e.preventDefault(); pay(false); });
+  $("stuck").addEventListener("click", () => pay(true));
+  $("pay-amount").addEventListener("input", checkAmount);
+
+  $("cut-form").addEventListener("submit", (e) => { e.preventDefault(); cut(Number($("cut-count").value)); });
+
+  $("transfer-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const to = $("transfer-to").value.trim(), wei = parseEth($("transfer-amount").value), problem = $("transfer-problem");
+    problem.hidden = isAddress(to) && wei !== null && wei > 0n;
+    problem.textContent = !isAddress(to) ? "an address, 0x and 40 hex digits" : "an amount in ETH, more than 0";
+    if (!problem.hidden) return;
+    const leaf = nextCold();
+    if (leaf === undefined) { notice("Not sent: no cold leaf left. Rotate for a new tree.", "error"); return; }
+    const l = send({ leaf, mode: "keyed", to, value: wei, gas: nextGas("keyed"), maxCost: eth("0.00023") });
+    render({ fill: [leaf] });
+    if (l.status === "refused") notice(`Refused: lane ${l.lane}, leaf ${leaf}. The public mempool holds one pending per sender; the leaf is burned.`, "error");
+    else notice(`Sent ${formatWei(wei)} from the cold device on lane ${l.lane} (leaf ${leaf}): admitted.`);
+  });
+
+  for (const id of ["policy-value", "policy-fee", "policy-target", "policy-start", "cut-count", "rotate-height"]) $(id).addEventListener("input", () => dirty.add($(id)));
+
+  $("policy-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const valueCap = parseEth($("policy-value").value), feeCap = parseEth($("policy-fee").value), target = $("policy-target").value.trim(), hotStart = Number($("policy-start").value);
+    const min = S.epoch === 0 ? 2 : 1;
+    const problem = valueCap === null || feeCap === null ? "caps are amounts in ETH" : !isAddress(target) ? "the allowed target is an address, 0x and 40 hex digits"
+      : !Number.isInteger(hotStart) || hotStart < min || hotStart >= leafCount() ? `hot start is a leaf from ${min} to ${leafCount() - 1}`
+      : hotStart > S.hotStart ? "hot start is kept or lowered, never raised within an epoch" : null;
+    if (problem) { notice(`Not sent: ${problem}.`, "error"); return; }
+    const leaf = nextCold();
+    if (leaf === undefined) { notice("Not sent: no cold leaf left. Rotate for a new tree.", "error"); return; }
+    const l = send({ leaf, mode: "keyed", kind: "policy", value: 0n, gas: nextGas("keyed"), maxCost: eth("0.00023"), policy: { valueCap, feeCap, target, hotStart } });
+    render({ fill: [leaf] });
+    if (l.status !== "refused") notice(`Set policy sent on a cold leaf: ${short(l.hash)}. The caps change when it is included.`);
+    else notice(`Refused: lane ${l.lane}. The public mempool holds one pending per sender; the leaf is burned.`, "error");
+  });
+
+  let armedUntil = 0;
+  $("rotate-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const btn = $("rotate");
+    if (Date.now() > armedUntil) { // two clicks: the warning stands between them
+      armedUntil = Date.now() + 6000;
+      btn.textContent = "Confirm: rotate root";
+      btn.classList.add("armed");
+      later(6100, () => { if (Date.now() >= armedUntil) { btn.textContent = "Rotate root"; btn.classList.remove("armed"); } });
+      return;
+    }
+    armedUntil = 0;
+    btn.textContent = "Rotate root";
+    btn.classList.remove("armed");
+    const n = S.lanes.filter(pending).length;
+    if (n) { notice(`Not sent: the backend refuses to rotate while a lane is in flight (${n} now). Wait until each is included, expired or refused.`, "error"); return; }
+    const height = Math.min(12, Math.max(2, Number($("rotate-height").value) || S.height));
+    const leaf = nextCold();
+    const newRoot = "0x" + hex(64);
+    const l = send({ leaf, mode: "keyed", kind: "rotate", value: 0n, gas: nextGas("keyed"), maxCost: eth("0.00023"), rotate: { height, root: newRoot } });
+    render({ fill: [leaf] });
+    notice(`Rotation sent: ${short(l.hash)}. The wallet moves to epoch ${S.epoch + 1} once the chain shows root ${short(newRoot)}.`);
+  });
+
+  function rotated(l) {
+    const closed = S.epoch;
+    S.epoch += 1; S.height = l.rotate.height; S.root = l.rotate.root;
+    S.hotStart = Math.max(S.epoch === 0 ? 2 : 1, leafCount() - 16);
+    S.leaf.clear(); S.exported = []; dirty.clear();
+    S.lanes.unshift({ id: `sep${++laneSeq}`, kind: "sep", text: `Epoch ${closed} closed by the rotation in block ${group(l.block)}. Lanes below this line belong to the old tree.` });
+    render({ count: true, serial: true });
+    notice(`Rotation included: the wallet is at epoch ${S.epoch}, root ${short(S.root)}. The hot band starts over: cut tickets for the phone.`);
+  }
+
+  $("offline").addEventListener("change", (e) => setOffline(e.target.checked, true));
+  function setOffline(on, say) {
+    $("offline").checked = on;
+    $("cold-pane").classList.toggle("offline", on);
+    $("cold-fields").disabled = on;
+    if (say) notice(on ? "Cold device offline: the phone keeps paying from its tickets." : "Cold device online.");
+  }
+
+  const MEMPOOL_NOTICE = {
+    public: "Mempool: public. It holds one pending frame transaction per sender (not yet confirmed on the devnet, whose node may hold lanes with different keys), so a second lane may be refused and its leaf burned.",
+    alt: "Mempool: alt. Parallel lanes: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself; the sidecar relays at most 4 per 10 s pass by default, so they land out of order, 8 lanes over two or more blocks.",
+  };
+  function setMempool(m, say = true) {
+    S.mempool = m;
+    for (const i of document.querySelectorAll('input[name="mempool"]')) i.checked = i.value === m;
+    if (say) notice(MEMPOOL_NOTICE[m]);
+  }
+  for (const i of document.querySelectorAll('input[name="mempool"]')) i.addEventListener("change", () => setMempool(i.value));
+
+  $("banner-retry").addEventListener("click", () => { $("banner").hidden = true; });
+
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-explorer], a[data-mock-link]");
+    if (!a) return;
+    e.preventDefault();
+    notice(a.dataset.explorer ? `Mock: this link opens lane ${a.dataset.explorer} on explorer.altmempool.wtf.` : "Mock: only the hot-and-cold screen is drawn here; the agent and session screens are in 1-ledger.md.");
+  });
+
+  for (const b of document.querySelectorAll("[data-theme-set]")) {
+    b.addEventListener("click", () => {
+      const v = b.dataset.themeSet;
+      if (v === "auto") delete root.dataset.theme; else root.dataset.theme = v;
+      for (const o of document.querySelectorAll("[data-theme-set]")) o.setAttribute("aria-pressed", String(o === b));
+    });
+    b.setAttribute("aria-pressed", String((root.dataset.theme ?? "auto") === b.dataset.themeSet));
+  }
+
+  // Play scene: the hot-and-cold story in about 20 s
+  const play = $("play");
+  async function playScene() {
+    play.disabled = true;
+    const say = (t) => notice(`Scene: ${t}`);
+    try {
+      setMempool("alt", false);
+      if (ticketsLeft().length < 7) {
+        setOffline(false, false);
+        say("the phone has fewer than 7 tickets, so the cold device cuts more.");
+        cut(Math.min(10, uncutHot().length));
+        await wait(1400);
+      }
+      setOffline(true, false);
+      say("the cold device goes offline; the phone pays three times on the alt mempool, each on its own lane.");
+      await wait(1200);
+      pay(false); await wait(800);
+      pay(false); await wait(800);
+      const stuck = pay(true);
+      // the alt lanes land first, the stuck payment's retry included
+      const settled = () => !S.lanes.some(pending) && (!stuck || (stuck.retriedAs !== null && finalState(byId(stuck.retriedAs))));
+      for (let t = 0; t < 80 && !settled(); t++) await wait(250);
+      await wait(600);
+      setMempool("public", false);
+      say("the mempool switches to public, which holds one pending per sender; the phone pays three more times.");
+      await wait(1200);
+      pay(false); await wait(700);
+      pay(false); await wait(700);
+      pay(false);
+      await wait(1200);
+      say("done. The alt lanes ran in parallel; on the public mempool the second and third payments were refused.");
+    } finally { play.disabled = false; }
+  }
+  play.addEventListener("click", () => { void playScene(); });
+
+  // clocks: the block head every 6 s, live expiry counts every half second
+  setInterval(() => { S.head += 1; S.headAt = Date.now(); renderFooter(); }, 6000);
+  setInterval(() => {
+    for (const n of document.querySelectorAll("[data-deadline]")) n.textContent = expiryText(Number(n.dataset.deadline));
+    renderFooter();
+  }, 500);
+
+  render();
+  notice("Sent 0.25 ETH from the cold device on lane 0x2 (leaf 2): admitted.", undefined, now - 2400);
+  if (!params.has("freeze")) later(9000, () => include(inFlight));
+  if (params.has("play")) later(600, () => { void playScene(); });
+})();
+</script>
+</body>
+</html>
