@@ -36,6 +36,16 @@ export const DEVNET = {
   blockTime: 6,
 } as const satisfies NetworkConfig;
 
+/**
+ * Tip floor (Nov 6, Vicky; spec "Fees"). The devnet sidecar relays the highest maxPriorityFeePerGas first, 4 per 10 s
+ * pass, and its own quote (skandha_getGasPrice) sat a few wei below teams that fix 2 gwei, so oracle-priced lanes waited
+ * behind them past their deadline. Every quote is raised to this tip. WL_MIN_TIP_WEI overrides it; the default is
+ * 3 gwei on chain 1337 (the devnet) and off on any other chain (the local fake chain is 31337).
+ */
+export const tipFloorFor = (chainId: bigint): bigint => (chainId === 1337n ? 3_000_000_000n : 0n);
+/** The default network's tip floor: WL_MIN_TIP_WEI where a process exists, else tipFloorFor(DEVNET.chainId). */
+export const MIN_TIP_WEI = BigInt(env("WL_MIN_TIP_WEI", String(tipFloorFor(DEVNET.chainId))));
+
 /** Live at the short address, not the EIP's 0x81413f0c…FfFf (Day-0). Data: 8-byte big-endian deadline. */
 export const EXPIRY_VERIFIER: Address = "0x0000000000000000000000000000000000008141";
 /** EIP-8250 nonce manager, short address on the devnet (Day-0). Slot = keccak256(pad32(sender) ‖ key). */

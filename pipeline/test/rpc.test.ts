@@ -1,8 +1,8 @@
 // rpc() against a local HTTP server: which failures mean "the server refused" and which mean "nobody knows".
 // Written with Claude Code (AI) for Vicky.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { RPC, RpcError, gateway, normalizeNodeReceipt, receiptSucceeded, rpc } from "../src/rpc.ts";
-import { DEVNET } from "../src/config.ts";
+import { RPC, RpcError, gateway, normalizeNodeReceipt, receiptSucceeded, rpc, withTipFloor } from "../src/rpc.ts";
+import { DEVNET, MIN_TIP_WEI } from "../src/config.ts";
 
 type Reply = (req: Request) => Response | Promise<Response>;
 let reply: Reply = () => new Response("unset");
@@ -27,6 +27,45 @@ const failure = async () => {
   expect(e).toBeInstanceOf(RpcError);
   return e as RpcError;
 };
+
+describe("the tip floor (spec Fees, Nov 6)", () => {
+  test("a tip below the floor is raised to it, the max fee by the same amount; a tip at or above it is kept", () => {
+    // the devnet's quote on Nov 6: tip 1,999,999,993 and max fee 2,000,000,001 (8 wei of room for a 7 wei base fee)
+    const quote = { maxPriorityFeePerGas: "0x773593f9", maxFeePerGas: "0x77359401" } as const;
+    const floored = withTipFloor(quote, 3_000_000_000n);
+    expect(BigInt(floored.maxPriorityFeePerGas)).toBe(3_000_000_000n);
+    expect(BigInt(floored.maxFeePerGas)).toBe(3_000_000_008n); // the quote's 8 wei of room kept
+    expect(withTipFloor(quote, 1_000_000_000n)).toBe(quote);
+    expect(withTipFloor(quote, 1_999_999_993n)).toBe(quote);
+    expect(withTipFloor(quote, 0n)).toBe(quote);
+  });
+
+  test("3 gwei by default on chain 1337, off on any other chain, unless WL_MIN_TIP_WEI says otherwise", () => {
+    const want = process.env.WL_MIN_TIP_WEI !== undefined ? BigInt(process.env.WL_MIN_TIP_WEI) : DEVNET.chainId === 1337n ? 3_000_000_000n : 0n;
+    expect(MIN_TIP_WEI).toBe(want);
+  });
+
+  test("gateway.gasPrice returns the floored quote", async () => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { maxPriorityFeePerGas: "0x1", maxFeePerGas: "0x9" } }))) as unknown as typeof fetch;
+    try {
+      const q = await gateway.gasPrice();
+      expect(BigInt(q.maxPriorityFeePerGas)).toBe(MIN_TIP_WEI > 1n ? MIN_TIP_WEI : 1n);
+      expect(BigInt(q.maxFeePerGas) - BigInt(q.maxPriorityFeePerGas)).toBe(8n);
+    } finally { globalThis.fetch = real; }
+  });
+});
+
+test("a created network floors its own quote by its own chain: 3 gwei on 1337, none on 31337, or as given", async () => {
+  const { createNetwork } = await import("../src/network.ts");
+  const quote = (async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { maxPriorityFeePerGas: "0x1", maxFeePerGas: "0x9" } }))) as unknown as typeof fetch;
+  const tipOf = async (o: { chainId: bigint; minTipWei?: bigint }) =>
+    BigInt((await createNetwork({ ...o, nodeUrl: "http://127.0.0.1:1", gatewayUrl: "http://127.0.0.1:2/rpc", fetch: quote }).gateway.gasPrice()).maxPriorityFeePerGas);
+  expect(await tipOf({ chainId: 1337n })).toBe(3_000_000_000n);
+  expect(await tipOf({ chainId: 31337n })).toBe(1n);
+  expect(await tipOf({ chainId: 31337n, minTipWei: 5n })).toBe(5n);
+  expect(() => createNetwork({ chainId: 1n, nodeUrl: "http://a", gatewayUrl: "http://b", minTipWei: -1n })).toThrow(/minTipWei must be/);
+});
 
 describe("rpc failures", () => {
   test("HTTP 200 with a JSON-RPC error: answered, a refusal", async () => {
