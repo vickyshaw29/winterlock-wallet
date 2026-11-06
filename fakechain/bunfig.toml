@@ -1,0 +1,4 @@
+# Test setup for fakechain: the preload points every WL_* variable at a local port before any test loads the pipeline.
+# Written with Claude Code (AI) for Vicky.
+[test]
+preload = ["./test/preload.ts"]

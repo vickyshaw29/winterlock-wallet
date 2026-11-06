@@ -8,7 +8,7 @@
 import { hexToBytes, toHex, type Address, type Hex } from "viem";
 import {
   DEVNET, GRIND, buildFrameTx, formatAdmissionReport, gateway, node, nonceKeyFor, placeholders, sendKeyed, signFrameTx,
-  simulationSummary, wotsVerifySteps, type FrameTransaction, type SignatureSlot,
+  simulationSummary, wotsVerifySteps, usableVerifyGas, GRIND_MARGIN, PROXY_PRE_CALL, type FrameTransaction, type SignatureSlot,
 } from "../src/index.ts";
 import { accountSigner, loadDeployment, openJournal } from "./lib/wallet.ts";
 
@@ -88,7 +88,7 @@ const sxx = points.reduce((s, p) => s + BigInt(p.steps) ** 2n, 0n), sxy = points
 const slope = Number(n * sxy - sx * sy) / Number(n * sxx - sx * sx);
 const intercept = Number(sy) / Number(n) - slope * (Number(sx) / Number(n));
 console.log(`   verify gas = ${intercept.toFixed(0)} + ${slope.toFixed(2)} x chain steps   (${points.map((p) => `${p.steps}→${p.gas}`).join(", ")})`);
-console.log(`   so a ${VERIFY_LIMIT} limit fits messages up to ${Math.floor((Number(VERIFY_LIMIT) - intercept) / slope)} steps (average message: 506)`);
+console.log(`   so a ${VERIFY_LIMIT} limit fits messages up to ${Math.floor((usableVerifyGas(VERIFY_LIMIT, PROXY_PRE_CALL) - GRIND_MARGIN - intercept) / slope)} steps behind the proxy, with the grinder's margin (average message: 506)`);
 
 // ------------------------------------------------------------------ 4. a hot ticket
 // Under the 90k limit a hot ticket's extra policy reads leave room for about 428 chain steps: about 1 message in 70
