@@ -2,7 +2,7 @@
 // timeline lines, retry links between an expired lane and its retry, and the "set aside for pending" line.
 // Written with Claude Code (AI) for Vicky.
 import { describe, expect, test } from "bun:test";
-import { amountMark, changes, epochRule, laneRows, refusalOf, setAside, setAsideText, splitAmount, stampOf, statusOf, stepOf, stepsOf, tiltOf } from "../public/lanes.js";
+import { amountMark, changes, epochRule, laneRows, refusalOf, setAside, setAsideText, splitAmount, stampOf, statusOf, stepOf, stepsOf, tiltOf } from "../src/domain/lanes.js";
 import { H, at, rec, receipt } from "./records.ts";
 
 describe("status and steps", () => {

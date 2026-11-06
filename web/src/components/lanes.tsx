@@ -15,7 +15,7 @@ import {
   stampOf,
   amountMark,
   epochRule,
-} from "../../public/lanes.js";
+} from "../domain/lanes.js";
 import {
   Dialog,
   DialogContent,

@@ -1,6 +1,5 @@
 {
-  // serve.ts and the tests (Bun types); the browser modules are checked by public/tsconfig.json. Edited for the screens
-  // with Claude Code (AI) for Vicky.
+  // Bun server/tests; React and shared domain helpers have separate strict configurations.
   "compilerOptions": {
     // Environment setup & latest features
     "lib": ["ESNext"],

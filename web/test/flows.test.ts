@@ -3,9 +3,9 @@
 // limits in words, the parallel-lanes plan, GET /api/status's shape with the status line and banner, and the client's
 // errors. Written with Claude Code (AI) for Vicky.
 import { describe, expect, test } from "bun:test";
-import { ApiError, createApi } from "../public/api.js";
-import * as flows from "../public/flows.js";
-import { changePct, createMockMarket, fallPct, ruleFires } from "../public/market.js";
+import { ApiError, createApi } from "../src/domain/api.js";
+import * as flows from "../src/domain/flows.js";
+import { changePct, createMockMarket, fallPct, ruleFires } from "../src/domain/market.js";
 
 const TARGET = "0x5544596212F91984C986A919C8026DF0576816f9";
 const wallet = {

@@ -5,18 +5,21 @@
 // real 4-second first deadline, which missShortDeadlines makes miss its block, as the devnet's 6-second blocks usually
 // do.
 // Written with Claude Code (AI) for Vicky.
-import { afterEach, beforeAll, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import type { Server } from "bun";
 import { MARKET } from "../../backend/test/fake-chain.ts";
 import { ETH, Harness, OTHER, TARGET, missShortDeadlines, requireCli } from "../../backend/test/helpers.ts";
-import { ApiError, createApi, type Api } from "../public/api.js";
-import * as flows from "../public/flows.js";
-import { formatWei } from "../public/format.js";
-import { laneRows, setAside, setAsideText } from "../public/lanes.js";
-import * as scenes from "../public/scenes.js";
+import { ApiError, createApi, type Api } from "../src/domain/api.js";
+import * as flows from "../src/domain/flows.js";
+import { formatWei } from "../src/domain/format.js";
+import { laneRows, setAside, setAsideText } from "../src/domain/lanes.js";
+import * as scenes from "../src/domain/scenes.js";
 import { startWebServer, type WebServer } from "../serve.ts";
+import { createStaticFixture } from "./static-fixture.ts";
+const staticFixture = createStaticFixture();
+afterAll(staticFixture.cleanup);
 
 const loopbackFetch = globalThis.fetch; // the fake chain replaces globalThis.fetch while it is installed
 setDefaultTimeout(30_000);
@@ -30,7 +33,7 @@ const proxied: string[] = [];
 
 /** serve.ts in front of the backend's current port, and the client the pages use through it */
 function front() {
-  web = startWebServer({ port: 0, backendUrl: `http://127.0.0.1:${backend.port}`, fetch: loopbackFetch, log: (l) => proxied.push(l) });
+  web = startWebServer({ publicDir: staticFixture.publicDir, spa: true, port: 0, backendUrl: `http://127.0.0.1:${backend.port}`, fetch: loopbackFetch, log: (l) => proxied.push(l) });
   api = createApi({ base: web.url, fetch: loopbackFetch });
 }
 
@@ -295,8 +298,7 @@ describe("agent", () => {
   });
 
   test("the allowance's stub strip from the real view: the tranches used on chain, the compromised tickets burned, and the next ticket is the one the device signs next", async () => {
-    const { allowanceCount } = await import("../public/agent.js");
-    const { leafStates, nextTicket, stubsOf } = await import("../public/register.js");
+    const { leafStates, nextTicket, stubsOf } = await import("../src/domain/register.js");
     const a = await wallet();
     h.chain.credit(a, 1n * ETH);
     await flows.cutTickets(api, a, 8);
@@ -310,7 +312,7 @@ describe("agent", () => {
       [16, "onchain", false], [17, "onchain", false], [18, "onchain", false], [19, "onchain", false],
       [20, "burned", false], [21, "burned", false], [22, "phone", true], [23, "phone", false],
     ]);
-    expect(allowanceCount(w, false)).toEqual({ n: "2", of: " of 8", note: "tickets left of those cut; 6 used or burned" });
+    expect(w.tickets).toEqual({ exported: 8, used: 6, left: 2 });
     // the serial the screen shows as next is the real one: the ticket device signs exactly that leaf
     const next = await flows.send(api, a, flows.payBody({ wallet: w, valueWei: 1000n, mempool: "alt" }));
     expect(next.leaf).toBe(nextTicket(w, states)!);

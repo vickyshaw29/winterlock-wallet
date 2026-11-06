@@ -15,7 +15,6 @@
   "scripts": {
     "build": "mm-snap build",
     "serve": "mm-snap build && mm-snap serve",
-    "site": "bun site/serve.ts",
     "test": "../pipeline/node_modules/.bin/tsc -p . && WL_SNAP_FAKE_CHAIN=1 mm-snap build && jest; s=$?; mm-snap build && exit $s"
   },
   "dependencies": {

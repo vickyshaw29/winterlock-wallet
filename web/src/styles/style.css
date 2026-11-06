@@ -176,11 +176,6 @@ header.top {
   background: var(--rail-active);
   color: var(--accent);
 }
-.screens .flask-link {
-  margin-left: auto;
-  padding-inline: 12px;
-  font-size: 12px;
-}
 .rail-foot {
   display: flex;
   align-items: center;
@@ -1359,9 +1354,6 @@ table.lanes {
   .screens a {
     padding-inline: 11px;
   }
-  .screens .flask-link {
-    margin-left: 0;
-  }
   .summary {
     gap: 18px 24px;
   }
@@ -1392,9 +1384,6 @@ table.lanes {
   .screens a {
     padding: 11px 12px;
     border-radius: 10px 10px 0 0;
-  }
-  .screens .flask-link {
-    margin-left: 0;
   }
   .page-intro {
     padding-top: 26px;
@@ -1450,9 +1439,6 @@ table.lanes {
   }
   .screens a svg {
     display: none;
-  }
-  .screens .flask-link {
-    font-size: 12px;
   }
   h1 {
     font-size: 27px;

@@ -1,5 +1,5 @@
 // Reuse the tested wire contract and exact-integer transaction helpers.
-export { ApiError, createApi } from "../../public/api.js";
+export { ApiError, createApi } from "../domain/api.js";
 export type {
   WalletView,
   WalletSummary,
@@ -7,6 +7,6 @@ export type {
   SendBody,
   SendAnswer,
   PlanQuery,
-} from "../../public/api.js";
-export * from "../../public/flows.js";
-export * from "../../public/format.js";
+} from "../domain/api.js";
+export * from "../domain/flows.js";
+export * from "../domain/format.js";

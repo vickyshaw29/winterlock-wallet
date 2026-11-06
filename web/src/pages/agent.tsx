@@ -22,9 +22,9 @@ import {
   trancheWei,
   type SendAnswer,
 } from "../lib/api";
-import { agentScene } from "../../public/scenes.js";
-import { changePct, createMockMarket, ruleFires } from "../../public/market.js";
-import { setAside, setAsideText, statusOf } from "../../public/lanes.js";
+import { agentScene } from "../domain/scenes.js";
+import { changePct, createMockMarket, ruleFires } from "../domain/market.js";
+import { setAside, setAsideText, statusOf } from "../domain/lanes.js";
 
 export function AgentPage() {
   const s = useWallet();

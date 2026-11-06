@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatAgo, formatClock, formatCount, formatGas, formatOffset, formatWei, formatWeiExact, isAddress, nonceKeyParts, parseEth, shortHex, toBigInt, weiToEthInput,
-} from "../public/format.js";
+} from "../src/domain/format.js";
 
 describe("formatWei and formatWeiExact", () => {
   test("exact, never rounded (titles): wei below 1 gwei, ETH above with trailing zeros trimmed", () => {
