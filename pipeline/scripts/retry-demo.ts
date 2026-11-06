@@ -30,7 +30,7 @@ const r = await sendWithRetry({
 
 for (const [i, a] of r.attempts.entries()) {
   console.log(`\n== attempt ${i + 1}: leaf ${a.leaf}, key 0x${a.nonceKey.toString(16)}, deadline ${a.deadline}, ${a.outcome}${a.receipt ? ` in block ${BigInt(a.receipt.blockNumber)}` : ""}`);
-  if (a.grind) console.log(`   grinding: message needs ${a.grind.steps} chain steps, limit allows ${a.grind.maxSteps}, ${a.grind.tries.length} deadline(s) tried: ${a.grind.tries.map((t) => `${t.value}→${t.steps}`).join(", ")}`);
+  if (a.grind) console.log(`   grinding: message needs ${a.grind.steps} chain steps, limit allows ${a.grind.maxSteps}, ${a.grind.tries.length} fee value(s) tried: ${a.grind.tries.map((t) => `${t.value}→${t.steps}`).join(", ")}`);
   if (a.simulation) console.log(`   ${simulationSummary(a.simulation)}`);
   console.log(a.admission ? formatAdmissionReport(a.admission).split("\n").map((l) => `   ${l}`).join("\n") : "   admission: no record");
   console.log(`   ${a.explorerUrl}`);

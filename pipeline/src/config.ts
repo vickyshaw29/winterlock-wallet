@@ -53,14 +53,15 @@ export const DEFAULTS = {
 } as const;
 
 /**
- * Verify-frame cost model for grinding: baseGas + gasPerStep x WOTS+ chain steps. Estimates until the real
- * verifier is measured on the devnet: baseGas is the account's measured verify frame without hashing (cold
- * 30,677, hot 37,300; spec Day-0) plus about 5,000 for the verifier's fixed work; 80 gas per step is the top
- * of the spec's 75 to 80 estimate.
+ * Verify-frame cost model for grinding: baseGas + gasPerStep x WOTS+ chain steps, for the bit-split verifier.
+ * hashsig_verify on the devnet = 24,070 + 66.06 x steps (measure-verifier.ts, Nov 6). The account's own checks add
+ * about 30,396 on a cold leaf (account 1's 53,828 minus its verifier's 23,432) and about 6,623 more on a hot leaf
+ * (Day-0: 37,300 against 30,677). Plus a 600-gas margin. To be confirmed by account 2's first sends; a preflight
+ * refuses any message the model gets wrong.
  */
 export const GRIND = {
-  cold: { baseGas: 36_000, gasPerStep: 80 },
-  hot: { baseGas: 43_000, gasPerStep: 80 },
+  cold: { baseGas: 55_100, gasPerStep: 66.1 },
+  hot: { baseGas: 61_700, gasPerStep: 66.1 },
 } as const;
 
 export const explorerTxUrl = (hash: string) => `${DEVNET.explorer}/tx/${hash}`;

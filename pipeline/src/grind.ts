@@ -41,7 +41,9 @@ export function grind<T>(candidate: (i: number) => { value: T; tx: FrameTransact
     throw new Error(`verify limit ${c.verifyGasLimit} leaves room for ${maxSteps} steps; even the best message needs ${WOTS.bestSteps}`);
   }
   const tries: GrindTry<T>[] = [];
-  const limit = c.maxTries ?? 256;
+  // One try is one sig hash, well under a millisecond. Under the 90k limit a hot ticket needs about 71 on average;
+  // 4,096 tries leave a chance of about 1e-25 of no fit.
+  const limit = c.maxTries ?? 4_096;
   for (let i = 0; i < limit; i++) {
     const { value, tx } = candidate(i);
     const sigHash = computeSigHash(tx);

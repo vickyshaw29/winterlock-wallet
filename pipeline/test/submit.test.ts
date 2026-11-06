@@ -525,3 +525,26 @@ describe("second review (Nov 6)", () => {
   });
 });
 
+describe("grinding the fee (Vicky's decision, Nov 6)", () => {
+  test("only the fee moves, one wei per try; the deadline is exact and the signed message fits", async () => {
+    const tight = { baseGas: 90_000 - 470 * 66.1, gasPerStep: 66.1 }; // room for 470 steps, below the ~506 average
+    const r = await sendKeyed(base({ grind: tight, expirySeconds: 90 }));
+    const quoted = 0x77359400n; // the fake sidecar's maxFeePerGas
+    expect(BigInt(r.deadline)).toBe(chain.ts(chain.base) + 90n);
+    expect(r.grind!.tries.map((t) => t.value)).toEqual(r.grind!.tries.map((_, i) => quoted + BigInt(i)));
+    expect(r.grind!.steps).toBeLessThanOrEqual(470);
+    expect(r.grind!.tries.slice(0, -1).every((t) => t.steps > 470)).toBe(true);
+    expect(r.outcome).toBe("OnChain");
+  });
+
+  test("a hot ticket under the 90k limit finds a fit with the default tries", async () => {
+    // GRIND.hot leaves about 428 steps: about 1 message in 70 fits
+    const { GRIND } = await import("../src/config.ts");
+    for (let k = 0; k < 3; k++) {
+      const r = await sendKeyed(base({ grind: GRIND.hot }));
+      expect(r.grind!.steps).toBeLessThanOrEqual(r.grind!.maxSteps);
+      expect(r.grind!.maxSteps).toBe(Math.floor((90_000 - GRIND.hot.baseGas) / GRIND.hot.gasPerStep));
+    }
+  });
+});
+

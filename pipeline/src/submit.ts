@@ -199,7 +199,11 @@ export interface SendKeyedParams {
   expirySeconds?: number;
   /** fixed fees instead of skandha_getGasPrice (e.g. a fee below market, to show a stuck payment) */
   fees?: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
-  /** grind the expiry deadline until the WOTS+ chain work fits verifyGas (cost model: GRIND in config) */
+  /**
+   * Grind until the WOTS+ chain work fits verifyGas (cost model: GRIND in config). The field ground is maxFeePerGas,
+   * one wei per try, so the deadline stays exact (Vicky's decision, Nov 6); a few thousand wei at most, against fees
+   * of about 2 gwei per gas.
+   */
   grind?: { baseGas: number; gasPerStep: number; maxTries?: number };
   /** run ethrex_simulateFrameTransaction first and stop if it says invalid */
   preflight?: boolean;
@@ -222,8 +226,8 @@ export interface SendKeyedResult extends InclusionResult {
   deadline: number;
   simulation: SimulationResult | null;
   admission: AdmissionReport | null;
-  /** present when the send was ground: the chain steps of the signed message and every deadline tried */
-  grind: { steps: number; maxSteps: number; tries: GrindTry<number>[] } | null;
+  /** present when the send was ground: the chain steps of the signed message and every maxFeePerGas tried */
+  grind: { steps: number; maxSteps: number; tries: GrindTry<bigint>[] } | null;
 }
 
 export type SendStage = "check" | "prepare" | "sign" | "preflight" | "submit" | "follow";
@@ -312,9 +316,9 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
   }
   // The expiry frame compares against block.timestamp, so the deadline counts from chain time when the host is behind.
   const baseDeadline = Math.max(localNow, chainNow) + expiry;
-  const buildAt = (nonceKey: bigint, slots: SignatureSlot[], deadline: number) => buildFrameTx({
+  const buildAt = (nonceKey: bigint, slots: SignatureSlot[], maxFeePerGas: bigint) => buildFrameTx({
     chainId: DEVNET.chainId, sender: p.sender, nonce: { keys: [nonceKey], seq: 0n },
-    verifyGas: p.verifyGas, calls: p.calls, deadline, fees, signatures: placeholders(slots),
+    verifyGas: p.verifyGas, calls: p.calls, deadline: baseDeadline, fees: { ...fees, maxFeePerGas }, signatures: placeholders(slots),
   });
   const peek = () => {
     try {
@@ -328,7 +332,8 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
   // 1. The leaf. Its key is read on chain first; then, with no await until the reservation, the leaf is checked
   //    against the signer, the transaction is built (and ground), and the leaf is reserved. A send running beside
   //    this one in the same process cannot take the leaf in between, and a failed check reserves nothing.
-  let leaf: number, nonceKey: bigint, slots: SignatureSlot[], unsigned: FrameTransaction, deadline: number;
+  let leaf: number, nonceKey: bigint, slots: SignatureSlot[], unsigned: FrameTransaction;
+  const deadline = baseDeadline;
   let ground: SendKeyedResult["grind"] = null;
   for (;;) {
     const next = peek();
@@ -348,13 +353,11 @@ export async function sendKeyed(p: SendKeyedParams): Promise<SendKeyedResult> {
       slots = p.signatures(next.leaf);
       checkSlots(slots, next.leaf, j);
       if (p.grind) {
-        const g = grind((i) => ({ value: baseDeadline + i, tx: buildAt(next.nonceKey, slots, baseDeadline + i) }), { ...p.grind, verifyGasLimit: p.verifyGas });
+        const g = grind((i) => { const fee = fees.maxFeePerGas + BigInt(i); return { value: fee, tx: buildAt(next.nonceKey, slots, fee) }; }, { ...p.grind, verifyGasLimit: p.verifyGas });
         unsigned = g.tx;
-        deadline = g.value;
         ground = { steps: g.steps, maxSteps: g.maxSteps, tries: g.tries };
       } else {
-        deadline = baseDeadline;
-        unsigned = buildAt(next.nonceKey, slots, deadline);
+        unsigned = buildAt(next.nonceKey, slots, fees.maxFeePerGas);
       }
     } catch (e) {
       return fail(`leaf ${next.leaf} not reserved: ${message(e)}`, e);

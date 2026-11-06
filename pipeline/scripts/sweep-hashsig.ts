@@ -18,9 +18,9 @@ const RESERVE = 5_000_000_000_000_000n;
 const signer = await accountSigner(from); // refuses a seed file that does not build this account's tree
 const journal = openJournal(from);
 const balance = await node.balance(from.account);
-console.log(`from ${from.account} (${Number(balance) / 1e18} ETH) to ${to}, grinding for ${grind.baseGas} + ${grind.gasPerStep} x steps <= 94,900`);
+console.log(`from ${from.account} (${Number(balance) / 1e18} ETH) to ${to}, grinding for ${grind.baseGas} + ${grind.gasPerStep} x steps <= 90,000`);
 const r = await sendKeyed({
-  journal, band: { from: 1, to: 500 }, sender: from.account, calls: [{ to, value: balance - RESERVE }], verifyGas: 94_900n,
+  journal, band: { from: 1, to: 500 }, sender: from.account, calls: [{ to, value: balance - RESERVE }], verifyGas: 90_000n, // spec ceiling
   grind, preflight: true, signatures: (leaf) => [{ kind: "hash", signer, leaf }],
   onStatus: (s) => console.log(`  status ${s}`),
 });
@@ -28,7 +28,7 @@ const verify = r.receipt ? BigInt(r.receipt.frameReceipts[1]!.gasUsed.execution)
 const total = await node.receipt(r.txHash);
 console.log(`\n${r.outcome} in block ${r.receipt ? BigInt(r.receipt.blockNumber) : "-"}: tx ${r.txHash}`);
 console.log(`  leaf ${r.leaf}, nonce key 0x${r.nonceKey.toString(16)}, message ${r.sigHash}`);
-console.log(`  ${r.grind!.steps} WOTS+ chain steps (limit ${r.grind!.maxSteps}, ${r.grind!.tries.length} deadline(s) tried); verify frame ${verify} of 94,900; whole transaction ${total?.gasUsed ? BigInt(total.gasUsed) : "?"} gas`);
+console.log(`  ${r.grind!.steps} WOTS+ chain steps (limit ${r.grind!.maxSteps}, ${r.grind!.tries.length} fee value(s) tried); verify frame ${verify} of 90,000; whole transaction ${total?.gasUsed ? BigInt(total.gasUsed) : "?"} gas`);
 if (r.simulation) console.log(`  ${simulationSummary(r.simulation)}`);
 if (r.admission) console.log(formatAdmissionReport(r.admission).split("\n").map((l) => `  ${l}`).join("\n"));
 console.log(`  ${r.explorerUrl}`);

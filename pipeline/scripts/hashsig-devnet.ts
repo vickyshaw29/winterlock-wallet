@@ -7,7 +7,7 @@
 //   WL_GATEWAY_URL=https://altmempool.forshtat.com/rpc bun scripts/hashsig-devnet.ts
 import { hexToBytes, toHex, type Address, type Hex } from "viem";
 import {
-  DEVNET, buildFrameTx, formatAdmissionReport, gateway, node, nonceKeyFor, placeholders, sendKeyed, signFrameTx,
+  DEVNET, GRIND, buildFrameTx, formatAdmissionReport, gateway, node, nonceKeyFor, placeholders, sendKeyed, signFrameTx,
   simulationSummary, wotsVerifySteps, type FrameTransaction, type SignatureSlot,
 } from "../src/index.ts";
 import { accountSigner, loadDeployment, openJournal } from "./lib/wallet.ts";
@@ -25,16 +25,16 @@ const VERIFY_LIMIT = 90_000n;
 // Cost model before section 3 measures it on this account: hashsig_verify on the devnet = 24,070 + 66.06 x steps
 // (measure-verifier.ts, Nov 6), plus about 30,396 for the account's own checks (the earlier account's 53,828 minus the
 // earlier verifier's 23,432), plus a 600-gas margin. A preflight refuses any message the model gets wrong.
-const GRIND_START = { baseGas: 55_100, gasPerStep: 66.1 };
+const GRIND_START = GRIND.cold;
 const points: { steps: number; gas: bigint }[] = [];
 
 async function send(label: string, value: bigint, band: { from: number; to: number }) {
-  const r = await sendKeyed({ journal, band, sender: ACCOUNT, calls: [{ to: TARGET, value }], verifyGas: VERIFY_LIMIT, grind: GRIND_START, preflight: true, signatures: slots });
+  const r = await sendKeyed({ journal, band, sender: ACCOUNT, calls: [{ to: TARGET, value }], verifyGas: VERIFY_LIMIT, grind: band === HOT ? GRIND.hot : GRIND_START, preflight: true, signatures: slots });
   const verify = r.receipt ? BigInt(r.receipt.frameReceipts[1]!.gasUsed.execution) : 0n;
   const total = r.receipt ? (await node.receipt(r.txHash))?.gasUsed : undefined;
   points.push({ steps: r.grind!.steps, gas: verify });
   console.log(`   ${label}: leaf ${r.leaf}, key 0x${r.nonceKey.toString(16)}, ${r.outcome} in block ${r.receipt ? BigInt(r.receipt.blockNumber) : "-"}`);
-  console.log(`     message ${r.sigHash}: ${r.grind!.steps} chain steps (limit ${r.grind!.maxSteps}, ${r.grind!.tries.length} deadline(s) tried)`);
+  console.log(`     message ${r.sigHash}: ${r.grind!.steps} chain steps (limit ${r.grind!.maxSteps}, ${r.grind!.tries.length} fee value(s) tried)`);
   console.log(`     verify frame ${verify} gas of ${VERIFY_LIMIT} declared; whole transaction ${total ? BigInt(total) : "?"} gas`);
   console.log(`     ${r.admission?.summary ?? "no admission record"}`);
   console.log(`     ${r.explorerUrl}`);
@@ -90,10 +90,10 @@ const intercept = Number(sy) / Number(n) - slope * (Number(sx) / Number(n));
 console.log(`   verify gas = ${intercept.toFixed(0)} + ${slope.toFixed(2)} x chain steps   (${points.map((p) => `${p.steps}→${p.gas}`).join(", ")})`);
 console.log(`   so a ${VERIFY_LIMIT} limit fits messages up to ${Math.floor((Number(VERIFY_LIMIT) - intercept) / slope)} steps (average message: 506)`);
 
-// ------------------------------------------------------------------ 4. a hot ticket (only with --hot)
+// ------------------------------------------------------------------ 4. a hot ticket
 // Under the 90k limit a hot ticket's extra policy reads leave room for about 428 chain steps: about 1 message in 70
-// fits, so grinding the deadline would stretch its expiry. Waits for Vicky's decision on the grind field.
-if (process.argv.includes("--hot")) {
+// fits, so the signer grinds the fee by a few wei (about 71 tries) and the deadline stays exact.
+{
   console.log(`\n== 4. hot ticket (hot leaf, no classical key, capped value to the one target)`);
   await send("hot ticket, 0.001 ETH", 1_000_000_000_000_000n, HOT);
 }
