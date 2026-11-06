@@ -2,3 +2,22 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+solc_version = "0.8.30"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1000
+# solc compiles one Yul file per run: the mock gets its own profile so forge never batches it with Verifier.yul.
+additional_compiler_profiles = [{ name = "mock", optimizer_runs = 1001 }]
+compilation_restrictions = [{ paths = "test/VerifierMock.yul", optimizer_runs = 1001 }]
+# 3628: Account has a payable fallback and deliberately no receive(), which would take the empty verify frame.
+ignored_error_codes = ["license", "code-size", "init-code-size", "transient-storage", 3628]
+fs_permissions = [
+    { access = "read", path = "out" },
+    { access = "read", path = "../vectors" },
+    { access = "read", path = "src/Verifier.yul" },
+    { access = "read-write", path = "test/VerifierMock.yul" },
+]
+
+# The linter cannot parse Yul objects.
+[lint]
+lint_on_build = false
