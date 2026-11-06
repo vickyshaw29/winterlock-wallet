@@ -70,8 +70,11 @@ const BUNDLER_URL = "http://127.0.0.1:15192/rpc";
 const SCOPE = `eip155:${CHAIN}` as `${string}:${string}`;
 /** what MetaMask may ask of the account: the ERC-4337 methods only, so MetaMask never asks it for an EOA signature */
 const MM_METHODS = ["eth_prepareUserOperation", "eth_patchUserOperation", "eth_signUserOperation"] as const;
-/** the page's origins (snap.manifest.json): they may add the account to MetaMask and read it, never ask it to sign */
-const PAGE_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+/**
+ * the pages' origins (snap.manifest.json): the React app on 5173 and the Snap's own page (site/) on 15190. They may add
+ * the account to MetaMask and read it, never ask it to sign.
+ */
+const PAGE_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:15190", "http://127.0.0.1:15190"];
 /** the most calls one MetaMask user operation may carry: one transfer, or one contract call */
 const MM_MAX_CALLS = 1;
 
@@ -104,6 +107,11 @@ type State = {
   prepared?: Record<string, Prepared>;
   /** lanes signed for MetaMask and handed on: what each holds of the balance until the journal records its end */
   mmLanes?: Record<string, { maxCostWei: string; txHash: Hex; deadline: number }>;
+  /**
+   * The tree's leaf nodes (public), by the keyring's cache name: building them is about a million hashes, and MetaMask
+   * stops an idle Snap after 30 s, so without this every start would rebuild the tree.
+   */
+  leaves?: Record<string, Hex>;
 };
 interface Prepared {
   callData: Hex;
@@ -187,9 +195,15 @@ async function load(): Promise<Wallet> {
   }
   const salt = `winterlock-snap-v1/${CHAIN}/${genesis}/${state.install.nonce}`;
   const entropy = await snap.request({ method: "snap_getEntropy", params: { version: 1, salt } });
-  const keyring = new Keyring({ seed: bytes(entropy), generation: 0, height: HEIGHT, chains: [CHAIN] });
+  let built = false;
+  const leafCache = {
+    load: (name: string) => (state.leaves?.[name] ? bytes(state.leaves[name]) : null),
+    save: (name: string, nodes: Uint8Array) => { state.leaves = { [name]: hex(nodes) }; built = true; },
+  };
+  const keyring = new Keyring({ seed: bytes(entropy), generation: 0, height: HEIGHT, chains: [CHAIN], leafCache });
   const signer = keyringSigner(keyring);
   const root = hex(keyring.root());
+  if (built) await saveState();
   const w: Wallet = { p: pipeline({ root, treeSeed: signer.treeSeed }), signer, root, treeSeed: lower(signer.treeSeed), genesis, journal: null };
   if (state.account) {
     const journal = openJournal(w, state.account.address, false); // a missing journal is never recreated empty (rule 3)
@@ -501,7 +515,11 @@ function uuid(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-/** keyring_createAccount, from the page only: adds this Snap's Winterlock account to MetaMask, once. */
+/**
+ * keyring_createAccount or winterlock_addToMetaMask, from the page only: adds this Snap's Winterlock account to
+ * MetaMask, once. MetaMask lets a website call keyring methods only when it lists the origin as a website on an allowed
+ * protocol; a Flask that refuses http://localhost (Nov 6) still lets the page ask the Snap through wallet_invokeSnap.
+ */
 async function addToMetaMask(): Promise<KeyringAccount> {
   const w = await getWallet();
   if (!state.account || !w.journal) throw new Error("create the Winterlock account first (step 2), then add it to MetaMask");
@@ -697,6 +715,7 @@ function route(method: string, p: Record<string, unknown>): Promise<unknown> {
     case "winterlock_prepareAccount": return oneAtATime(() => prepareAccount(p));
     case "winterlock_useAccount": return oneAtATime(() => useAccount(p));
     case "winterlock_send": return oneAtATime(() => send(p));
+    case "winterlock_addToMetaMask": return oneAtATime(addToMetaMask);
     default: throw new MethodNotFoundError({ method });
   }
 }
