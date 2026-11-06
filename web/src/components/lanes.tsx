@@ -279,6 +279,11 @@ function LaneEvidence({
       <p>{detail.error ? errorText(detail.error) : "Loading evidence…"}</p>
     );
   const gas = r.gas;
+  // floorGas is the fixed part plus 64 per billed byte (ethrex's floor billing)
+  const floorOnly =
+    gas?.billedBytes != null ? BigInt(gas.billedBytes) * 64n : null;
+  const fixedGas =
+    gas?.floorGas && floorOnly !== null ? BigInt(gas.floorGas) - floorOnly : null;
   return (
     <div className="group lane-inspector">
       {detail.error && <p className="warning">{errorText(detail.error)}</p>}
@@ -305,19 +310,29 @@ function LaneEvidence({
       )}
       <h3>Gas, as reported</h3>
       <dl className="gas-columns">
-        {[
-          ["Declared verify", gas?.declaredVerifyGas],
-          ["Used verify", gas?.verifyGas ?? r.simulation.verifyGas],
-          ["Calldata floor", gas?.floorGas],
-          ["Receipt gas", gas?.gasUsed],
-        ].map(([label, value]) => (
-          <Fact label={label!} key={label}>
+        {(
+          [
+            ["Fixed", fixedGas],
+            ["Declared verify", gas?.declaredVerifyGas],
+            ["Used verify", gas?.verifyGas ?? r.simulation.verifyGas],
+            ["Calldata floor", floorOnly ?? gas?.floorGas],
+            ["Receipt gas", gas?.gasUsed],
+          ] as [string, string | bigint | null | undefined][]
+        ).map(([label, value]) => (
+          <Fact label={label} key={label}>
             {value === null || value === undefined
               ? "Unknown"
               : BigInt(value).toLocaleString()}
           </Fact>
         ))}
       </dl>
+      {floorOnly !== null && (
+        <p className="hint">
+          Calldata floor = {gas!.billedBytes!.toLocaleString()} billed bytes × 64.
+          The bill is the fixed part plus the larger of data and execution, or
+          this floor.
+        </p>
+      )}
       {gas?.declaredVerifyGas && gas.verifyGas && (
         <div className="gas-gauge">
           <label htmlFor="verify-gauge">

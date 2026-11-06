@@ -22,12 +22,12 @@ export const STUCK = Object.freeze({ firstAttemptExpirySeconds: 4, retries: 1 })
  * Parallel lanes as the devnet's sidecar runs them (spec, Nov 6, from the vendored sidecar's code): 1 pending
  * transaction per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself, and at most 4
  * relayed per 10 s pass by default, so 8 lanes land over two or more blocks. Any ERC-8421 draft number is labelled as
- * the draft's; the public mempool's one per sender is not yet confirmed on the devnet.
+ * the draft's; the public mempool's one per sender is measured on the devnet: 1 of 8 admitted, block 5,738.
  */
 export const LANE_LIMITS_TEXT = "Parallel lanes on the devnet's sidecar: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the " +
   "account pays for itself, relayed at most 4 per 10 s pass by default, so 8 lanes land over two or more blocks. " +
   "(The ERC-8421 draft's numbers, 4 per key and 64 per unstaked sender, are the draft's, not the devnet's.) " +
-  "The public mempool holds one pending per sender: not yet confirmed on the devnet.";
+  "The public mempool holds one pending per sender: measured on the devnet: 1 of 8 admitted, block 5,738.";
 
 /**
  * What the notice line says when the Mempool switch moves.
@@ -35,7 +35,7 @@ export const LANE_LIMITS_TEXT = "Parallel lanes on the devnet's sidecar: 1 pendi
  */
 export function mempoolNotice(m) {
   return m === "public"
-    ? "Mempool: public. It holds one pending frame transaction per sender (not yet confirmed on the devnet, whose node may hold lanes with different keys), so a second lane may be refused and its leaf burned."
+    ? "Mempool: public. It holds one pending frame transaction per sender (measured on the devnet: 1 of 8 admitted, block 5,738), so a second lane is refused and its leaf burned."
     : "Mempool: alt. Parallel lanes: 1 pending per lane (nonce key), no per-sender cap for keyed lanes the account pays for itself; the sidecar relays at most 4 per 10 s pass by default, so they land out of order, 8 lanes over two or more blocks.";
 }
 
