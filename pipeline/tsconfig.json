@@ -26,5 +26,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // dist/ is build output; the consumer fixture is typechecked on its own, against the packed package
+  // (test/package.test.ts); each example has its own tooling (examples/snap: its own tsconfig.json)
+  "exclude": ["node_modules", "dist", "test/fixtures/consumer", "examples"]
 }

@@ -1,0 +1,5 @@
+{
+  // An ordinary consumer's settings: no Bun or Node types, no .ts import paths.
+  "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "lib": ["ES2022", "DOM"], "types": [], "strict": true, "noEmit": true },
+  "include": ["consumer.ts"]
+}

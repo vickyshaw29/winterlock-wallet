@@ -1,0 +1,28 @@
+{
+  "version": "0.1.0",
+  "description": "Example: builds, grinds, signs (WOTS+ two-pass) and sends a Winterlock frame transaction with @winterlock/pipeline/core.",
+  "proposedName": "Winterlock pipeline example",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vickyshaw29/winterlock-wallet.git"
+  },
+  "source": {
+    "shasum": "e5FgCeva2mwCNf9DG5WEYwDq+Wso7vJrv+Yq6WJ5zfI=",
+    "location": {
+      "npm": {
+        "filePath": "dist/bundle.js",
+        "packageName": "winterlock-pipeline-example-snap",
+        "registry": "https://registry.npmjs.org/"
+      }
+    }
+  },
+  "initialPermissions": {
+    "endowment:rpc": {
+      "allowedOrigins": ["http://127.0.0.1:15190"]
+    },
+    "snap_getEntropy": {},
+    "snap_manageState": {}
+  },
+  "platformVersion": "12.1.0",
+  "manifestVersion": "0.1"
+}

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pipeline core in the browser</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f6f2; --panel: #ffffff; --ink: #1b1b1a; --muted: #5d5b55; --line: #dedbd2; --accent: #1f5d4c; --good: #1f6a3a; --bad: #9a2a1f;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #151514; --panel: #1e1e1c; --ink: #ecebe6; --muted: #a8a59c; --line: #34332f; --accent: #7cc4ad; --good: #7cc48f; --bad: #e48b7f; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 900px; margin: 0 auto; padding: 32px 16px 48px; }
+    h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .lede { color: var(--muted); margin: 0 0 24px; max-width: 70ch; }
+    button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); cursor: pointer; }
+    button:disabled { opacity: 0.6; cursor: progress; }
+    button.quiet { background: transparent; color: var(--accent); padding: 6px 12px; font-weight: 500; }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    #status { margin: 12px 0 24px; color: var(--muted); min-height: 1.5em; }
+    section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; margin: 0 0 16px; }
+    section h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+    dl { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 16px; margin: 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; font-family: var(--mono); font-size: 0.9rem; overflow-wrap: anywhere; }
+    .ok { color: var(--good); font-weight: 600; }
+    .no { color: var(--bad); font-weight: 600; }
+    pre { margin: 8px 0 0; max-height: 360px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 6px; font: 0.8rem/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 6px; max-width: 360px; }
+    .bar > span { display: block; height: 100%; background: var(--accent); }
+    footer { color: var(--muted); font-size: 0.85rem; margin-top: 24px; }
+    @media (max-width: 560px) { dl { grid-template-columns: 1fr; } dt { margin-top: 6px; } }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pipeline core in the browser</h1>
+    <p class="lede">
+      The browser- and Snap-safe core of the Winterlock pipeline (<code>@winterlock/pipeline/core</code>, built into
+      <code>dist/core.js</code>) running in this page: a throwaway seed, the key tree, a frame transaction built,
+      ground and signed in two passes, then checked against the tree. This page may not open any connection, so nothing is sent.
+    </p>
+    <button id="run" type="button">Build and sign a frame transaction</button>
+    <p id="status" role="status" aria-live="polite">Height 10 tree for chain 1337: building it takes a few seconds.</p>
+    <div id="out" hidden>
+      <section aria-labelledby="h-env"><h2 id="h-env">Where it ran</h2><dl id="env"></dl></section>
+      <section aria-labelledby="h-tree"><h2 id="h-tree">Key tree and leaf</h2><dl id="tree"></dl></section>
+      <section aria-labelledby="h-gas"><h2 id="h-gas">Verify budget</h2><dl id="gas"></dl></section>
+      <section aria-labelledby="h-sig"><h2 id="h-sig">Signature</h2><dl id="sig"></dl></section>
+      <section aria-labelledby="h-wire">
+        <h2 id="h-wire">Wire JSON (what eth_sendFrameTransaction would receive)</h2>
+        <button id="copy" class="quiet" type="button">Copy JSON</button>
+        <pre id="wire" tabindex="0"></pre>
+      </section>
+    </div>
+    <footer>Example. Throwaway seed, generated in this page and never stored. Chain id 1337, sender and recipient are example addresses.</footer>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

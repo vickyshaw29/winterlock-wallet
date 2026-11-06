@@ -1,0 +1,17 @@
+{
+  // Type declarations for dist/ (bun run build): the browser- and Snap-safe core only, with .js import paths so a
+  // consumer's TypeScript resolves them. The JavaScript itself is bundled by Bun (scripts/build-core.ts).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "src",
+    "outDir": "dist/types",
+    "types": [],
+    // browser globals only: no Bun or Node types, so a Node API in the core does not typecheck
+    "lib": ["ESNext", "DOM"]
+  },
+  "include": ["src/core.ts"]
+}

@@ -19,7 +19,7 @@
 // sender's storage (ethrex at 9aa3645d, blockchain.rs and mempool.rs); not yet probed on the devnet.
 import { hexToBytes, toHex, type Hex } from "viem";
 import { frameGasModel } from "./estimate.ts";
-import { rpc } from "./rpc.ts";
+import { rpc, type RpcTransport } from "./rpc.ts";
 import type { FrameTransaction } from "./codec/FrameTx.ts";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -103,9 +103,9 @@ const TESTING_MODE_BUNDLE = 10;
  * demand (executor.ts:221-227), and debug_bundler_setBundleInterval, which anyone can call on the shared devnet,
  * changes the live interval (BundlingService/service.ts:151-156) while skandha_config keeps answering the old one.
  */
-export async function relayConfig(url: string): Promise<RelayConfig> {
+export async function relayConfig(url: string, transport: RpcTransport = {}): Promise<RelayConfig> {
   const notes: string[] = [];
-  const [cfgAnswer, infoAnswer] = await Promise.allSettled([rpc<unknown>(url, "skandha_config"), rpc<unknown>(url, "skandha_explorer_info")]);
+  const [cfgAnswer, infoAnswer] = await Promise.allSettled([rpc<unknown>(url, "skandha_config", [], transport), rpc<unknown>(url, "skandha_explorer_info", [], transport)]);
   let cfg: Record<string, unknown> | null = null;
   // rpc's errors name their method ("skandha_config: no response: …")
   if (cfgAnswer.status === "rejected") notes.push(message(cfgAnswer.reason));
