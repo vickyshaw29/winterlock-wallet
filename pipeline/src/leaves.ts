@@ -18,41 +18,14 @@ import path from "node:path";
 import { dlopen, FFIType } from "bun:ffi";
 import { toHex, type Address, type Hex } from "viem";
 import { nonceKeyFor } from "./builder.ts";
+import { ALLOWED_MOVES, firstUnseenLeaf, type Journal, type JournalIdentity, type JournalSnapshot, type LeafRecord, type LeafStatus } from "./journal.ts";
 
-export type LeafStatus = "reserved" | "submitted" | "onchain" | "burned" | "exported";
+// The record types and the rules every journal keeps live in journal.ts (Nov 6, shared with MemoryJournal for browsers
+// and Snaps); re-exported here for the importers of this file.
+export type { JournalIdentity, LeafRecord, LeafStatus } from "./journal.ts";
 
-export interface LeafRecord {
-  leaf: number;
-  nonceKey: Hex;
-  status: LeafStatus;
-  txHash?: Hex;
-  /** the expiry frame's deadline, so a pending transaction can be followed to its end after a crash */
-  deadline?: number;
-  note?: string;
-  updatedAt: string;
-}
-
-interface JournalData {
-  version: 1;
-  wallet: Address;
-  chainId: string;
-  epoch: number;
-  height: number;
-  /** the tree this journal hands out leaves of; absent in journals written before Nov 6 */
-  treeSeed?: Hex;
-  leaves: Record<string, LeafRecord>;
-}
-
-export interface JournalIdentity { wallet: Address; chainId: bigint; epoch: number; height: number; treeSeed?: Hex }
-
-/** Allowed moves. Nothing ever goes back, and nothing leaves the journal. */
-const NEXT: Record<LeafStatus, LeafStatus[]> = {
-  reserved: ["submitted", "burned"],
-  submitted: ["onchain", "burned"],
-  onchain: [],
-  burned: [],
-  exported: [],
-};
+/** The file's contents. */
+type JournalData = JournalSnapshot;
 
 /** flock(2) from the C library, loaded on first use. No platform without it may open a journal. */
 let flockFn: ((fd: number, op: number) => number) | null = null;
@@ -67,7 +40,7 @@ function flock(fd: number, op: number): number {
 }
 const inode = (st: fs.Stats) => `${st.dev}:${st.ino}`;
 
-export class LeafJournal {
+export class LeafJournal implements Journal {
   /** One instance per journal file in this process, keyed by its lock anchor's inode, not by a path spelling. */
   private static readonly instances = new Map<string, LeafJournal>();
   private closed = false;
@@ -189,23 +162,14 @@ export class LeafJournal {
    */
   peekNext(band: { from: number; to: number }): { leaf: number; nonceKey: bigint } {
     this.assertOpen();
-    const max = 2 ** this.data.height;
-    if (!Number.isInteger(band.from) || !Number.isInteger(band.to) || band.from < 0 || band.to > max || band.from >= band.to) {
-      throw new Error(`bad band [${band.from}, ${band.to}) for height ${this.data.height}`);
-    }
-    for (let leaf = band.from; leaf < band.to; leaf++) {
-      if (this.data.leaves[leaf]) continue;
-      if (this.data.epoch === 0 && leaf === 0) continue; // key 0 is the legacy nonce, see nonceKeyFor
-      return { leaf, nonceKey: nonceKeyFor(this.data.epoch, leaf) };
-    }
-    throw new Error(`no unused leaf left in [${band.from}, ${band.to})`);
+    return firstUnseenLeaf(this.data, band);
   }
 
   mark(leaf: number, status: LeafStatus, extra: { txHash?: Hex; deadline?: number; note?: string } = {}): void {
     this.assertOpen();
     const rec = this.data.leaves[leaf];
     if (!rec) throw new Error(`leaf ${leaf} is not in the journal`);
-    if (!NEXT[rec.status].includes(status)) throw new Error(`leaf ${leaf}: ${rec.status} -> ${status} is not allowed`);
+    if (!ALLOWED_MOVES[rec.status].includes(status)) throw new Error(`leaf ${leaf}: ${rec.status} -> ${status} is not allowed`);
     this.write(leaf, { ...rec, ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined)), status, updatedAt: new Date().toISOString() });
   }
 

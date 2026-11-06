@@ -12,11 +12,13 @@
 // billing formula (frameGasModel) splits out. A frame that reverts still estimates fine, so callers should also
 // preflight the final transaction.
 import { concat, hexToBytes, numberToHex, toRlp, type Address, type Hex } from "viem";
-import { DEFAULTS, DEVNET, NONCE_MANAGER, SIG_SCHEME_COST } from "./config.ts";
+import { DEFAULTS, NONCE_MANAGER, SIG_SCHEME_COST } from "./config.ts";
 import { buildFrameTx, nonceManagerSlot, type Call } from "./builder.ts";
 import { placeholders, signFrameTx, type SignatureSlot } from "./signer.ts";
-import { rpc, toWire, node } from "./rpc.ts";
-import type { LeafJournal } from "./leaves.ts";
+import { toWire } from "./rpc.ts";
+import { LeavesExhausted, SendError, checkSlots, journalMismatch } from "./submit.ts";
+import { defaultNetwork, type Network } from "./network.ts";
+import type { Journal } from "./journal.ts";
 import type { FrameTransaction } from "./codec/FrameTx.ts";
 
 /**
@@ -64,7 +66,7 @@ export interface CallEstimate {
 }
 
 export interface EstimateParams {
-  journal: LeafJournal;
+  journal: Journal;
   /** the band the transaction will use: the verify frame's checks (and hot rules) must match */
   band: { from: number; to: number };
   sender: Address;
@@ -72,6 +74,8 @@ export interface EstimateParams {
   signatures: (leaf: number) => SignatureSlot[];
   /** limit = used + used * percent / 100 + extra; default 10 % + 2,500 (SSTORE needs 2,300 left) */
   margin?: { percent: number; extra: number };
+  /** the network to estimate on; default DEVNET and the module-level clients */
+  network?: Network;
 }
 
 const BODY_LIMIT = 10_000_000n; // what the sidecar puts in every frame after self_verify
@@ -82,9 +86,17 @@ const MAX_PREFIX = 100_000n;
  * the state each one needs is known exactly; calls that depend on an earlier call's effects are estimated on
  * today's state. Returns the limits to put in each Call.
  */
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 export async function estimateCalls(p: EstimateParams): Promise<CallEstimate[]> {
   const margin = p.margin ?? { percent: 10, extra: 2_500 };
-  const head = await rpc<{ baseFeePerGas?: Hex }>(DEVNET.node, "eth_getBlockByNumber", ["latest", false]);
+  const net = p.network ?? defaultNetwork;
+  const chainId = net.chainId;
+  // The same journal checks as sendKeyed, before any leaf is reserved (review, Nov 6: with a journal of another chain,
+  // a leaf could sign here on this chain while only that other journal recorded it).
+  const mismatch = journalMismatch(p.journal, p.sender, chainId);
+  if (mismatch) throw new SendError(mismatch, { stage: "check" });
+  const head = await net.node.request<{ baseFeePerGas?: Hex }>("eth_getBlockByNumber", ["latest", false]);
   const baseFee = BigInt(head.baseFeePerGas ?? "0x1");
   // Low fees keep the simulated maximum cost (about 20 million gas per body frame) under a hot fee cap; gas used
   // does not depend on fees.
@@ -94,29 +106,56 @@ export async function estimateCalls(p: EstimateParams): Promise<CallEstimate[]> 
     // A leaf the journal has never seen and the chain has never consumed, burned whatever happens next.
     let leaf: number, nonceKey: bigint;
     for (;;) {
-      ({ leaf, nonceKey } = p.journal.reserveNext(p.band, "estimate only"));
-      if (BigInt(await node.storage(NONCE_MANAGER, nonceManagerSlot(p.sender, nonceKey))) === 0n) break;
-      p.journal.mark(leaf, "burned", { note: "key already consumed on chain" });
+      try {
+        ({ leaf, nonceKey } = p.journal.reserveNext(p.band, "estimate only"));
+      } catch (e) {
+        // a used-up band is the caller's 409, never a bug (review, Nov 6)
+        if (/no unused leaf/.test(e instanceof Error ? e.message : String(e))) throw new LeavesExhausted(`no leaf left for the estimate: ${(e as Error).message}`, { stage: "check", cause: e });
+        throw e;
+      }
+      let key: "unread" | "used" | "unused" = "unread";
+      try {
+        key = BigInt(await net.node.storage(NONCE_MANAGER, nonceManagerSlot(p.sender, nonceKey))) === 0n ? "unused" : "used";
+      } finally {
+        // A failed read burns the leaf too: left reserved, it would be a phantom lane that blocks rotation (review, Nov 6).
+        if (key !== "unused") p.journal.mark(leaf, "burned", { note: key === "used" ? "key already consumed on chain" : "estimate only: its key could not be read on chain; never signed" });
+      }
+      if (key === "unused") break;
     }
+    let signing = false;
     try {
+      // A journal that stores later (a Snap's) must hold the reservation before the leaf signs (journal.ts, rule 2).
+      if (p.journal.durable) {
+        try {
+          await p.journal.durable();
+        } catch (e) {
+          throw new SendError(`leaf ${leaf}: the journal could not store the estimate's reservation; nothing was signed: ${message(e)}`, { stage: "prepare", leaf, nonceKey, cause: e });
+        }
+      }
       const slots = p.signatures(leaf);
+      try {
+        checkSlots(slots, leaf, p.journal);
+      } catch (e) {
+        throw new SendError(`leaf ${leaf}: ${message(e)}`, { stage: "check", leaf, nonceKey, cause: e });
+      }
       // The largest verify limit the prefix cap allows, so the verify frame never runs short during the estimate.
       const verifyGas = MAX_PREFIX - DEFAULTS.expiryFrameGas - slots.reduce((s, x) => s + (x.kind === "ecdsa" ? 2_800n : 100n), 0n);
       const unsigned = buildFrameTx({
-        chainId: DEVNET.chainId, sender: p.sender, nonce: { keys: [nonceKey], seq: 0n }, verifyGas,
+        chainId, sender: p.sender, nonce: { keys: [nonceKey], seq: 0n }, verifyGas,
         deadline: Math.floor(Date.now() / 1000) + DEFAULTS.expirySeconds, fees,
         calls: [{ ...call, gas: BODY_LIMIT, stateGas: BODY_LIMIT }], // exactly what the sidecar simulates
         signatures: placeholders(slots),
       });
+      signing = true;
       const { tx } = await signFrameTx(unsigned, slots); // the one signature this leaf ever makes
-      const r = await rpc<{ frames: { execution: Hex }[]; cumulativeGasUsed: Hex }>(DEVNET.gateway, "eth_estimateFrameTransactionGas", [toWire(tx)]);
+      const r = await net.gateway.request<{ frames: { execution: Hex }[]; cumulativeGasUsed: Hex }>("eth_estimateFrameTransactionGas", [toWire(tx)]);
       const exec = r.frames.map((f) => BigInt(f.execution));
       const used = exec.at(-1)!;
       const state = inferStateGas(tx, BigInt(r.cumulativeGasUsed), exec);
       if (state < 0n) throw new Error(`state gas came out negative (${state}): the gas model no longer matches this node`);
       out.push({ used, execution: used + (used * BigInt(margin.percent)) / 100n + BigInt(margin.extra), state, leaf });
     } finally {
-      p.journal.mark(leaf, "burned", { note: "estimate only: signed once, never sent" });
+      p.journal.mark(leaf, "burned", { note: signing ? "estimate only: signed once, never sent" : "estimate only: never signed" });
     }
   }
   return out;

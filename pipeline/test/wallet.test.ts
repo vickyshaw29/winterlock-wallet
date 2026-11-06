@@ -11,7 +11,7 @@ import type { Deployment } from "../scripts/lib/wallet.ts";
 
 // This file's own data folder, never the checkout's .data (a reinjected bug once wrote test journals there).
 process.env.WL_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "wallet-data-"));
-const { journalFile, legacyJournalFile, openJournal, DATA_DIR } = await import("../scripts/lib/wallet.ts");
+const { accountSigner, journalFile, legacyJournalFile, openJournal, DATA_DIR } = await import("../scripts/lib/wallet.ts");
 afterAll(() => { fs.rmSync(DATA_DIR, { recursive: true, force: true }); delete process.env.WL_DATA_DIR; });
 
 const TREE: Hex = `0x${"5e".repeat(32)}`;
@@ -57,5 +57,17 @@ describe("a real tree's journal lives beside its seed", () => {
     const again = open(d); // what a second checkout opens: the seed path is the same, .data is not involved
     expect(again.get(1)?.status).toBe("reserved");
     expect(again.reserveNext({ from: 1, to: 500 }).leaf).toBe(2);
+  });
+
+  test("a record the backend rotated is refused by the scripts, which sign at epoch 0 only (E, default 3)", async () => {
+    const base = deployment("0x00000000000000000000000000000000000000a1");
+    fs.writeFileSync(base.tree!.seedFile, `0x${"5e".repeat(32)}\n`, { mode: 0o600 });
+    open(base, true).close(); // the epoch-0 journal exists: the refusal is about the record, not a missing file
+    const rotated: Deployment = { ...base, tree: { ...base.tree!, generation: 1 } };
+    const why = "rotated by the backend; the scripts sign at epoch 0 only";
+    expect(() => openJournal(rotated)).toThrow(why);
+    expect(() => openJournal(rotated, 1, { create: true })).toThrow(why);
+    await expect(accountSigner(rotated)).rejects.toThrow(why);
+    expect(fs.existsSync(journalFile(rotated, 1))).toBe(false);
   });
 });

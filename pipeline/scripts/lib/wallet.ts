@@ -40,8 +40,21 @@ export async function openKeyring(seedFile = SEED_FILE): Promise<Keyring> {
   return new Keyring({ seed, generation: TREE.generation, height: TREE.height, chains: [...TREE.chains], cacheDir: `${DATA_DIR}/hashsig-cache` });
 }
 
+/**
+ * The scripts build every tree at generation 0 (TREE) and read params.treeSeed and params.height, which stay the
+ * creation tree's after a rotation. A record the backend rotated names its current tree in `tree`, and only the backend
+ * may sign for it (review, Nov 6; Vicky's default 3).
+ */
+function requireEpochZero(d: Deployment): void {
+  const generation = d.tree?.generation ?? 0;
+  if (generation !== 0) {
+    throw new Error(`deployment ${d.account} is at tree generation ${generation}: rotated by the backend; the scripts sign at epoch 0 only. Use the backend for this account.`);
+  }
+}
+
 /** The account's hash-based signer. With the real verifier it checks the genesis pin before every signature. */
 export async function accountSigner(d: Deployment): Promise<HashSigner> {
+  requireEpochZero(d);
   if (d.verifier === "placeholder") {
     // the placeholder verifier only checks that the entry carries the message hash
     return placeholderSigner({ treeSeed: d.params.treeSeed, height: Number(d.params.height) });
@@ -84,6 +97,7 @@ export const legacyJournalFile = (account: Address, epoch = 0) => `${DATA_DIR}/j
  */
 export function openJournal(d: Deployment, epoch = 0, opts: { create?: boolean } = {}): LeafJournal {
   if (BigInt(d.chainId) !== DEVNET.chainId) throw new Error(`deployment ${d.account} is for chain ${d.chainId}, not ${DEVNET.chainId}`);
+  requireEpochZero(d);
   if (d.verifier === "hashsig" && fs.existsSync(legacyJournalFile(d.account, epoch))) {
     throw new Error(`a journal for ${d.account} is still in this checkout's .data (${legacyJournalFile(d.account, epoch)}). The account's ` +
       `journal lives beside its seed (${journalFile(d, epoch)}): if this file is the real one, move it with scripts/move-journal.ts; ` +

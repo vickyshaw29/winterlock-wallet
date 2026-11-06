@@ -1,16 +1,10 @@
-export * from "./config.ts";
-export * from "./rpc.ts";
-export * from "./builder.ts";
-export * from "./signer.ts";
+// The Bun entry of the pipeline: everything in core.ts (browser- and Snap-safe), plus the parts that need a file system
+// or a process: the file journal (it locks with bun:ffi, so Bun only), the genesis pin and seed files, the leaf cache
+// on disk, the CLI signer and the ticket device. The backend, the scripts and the tests import this file.
+export * from "./core.ts";
 export * from "./leaves.ts";
-export * from "./submit.ts";
-export * from "./wots.ts";
-export * from "./grind.ts";
-export * from "./admission.ts";
-export * from "./account.ts";
 export * from "./genesis.ts";
-export * from "./estimate.ts";
-export { computeSigHash, encodeRawFrameTx } from "./codec/codec.ts";
-// The vendored file also exports EXPIRY_VERIFIER and NONCE_MANAGER (same values); config.ts holds the Day-0-checked ones.
-export { FRAME_MODE, APPROVE_SCOPE, SIG_SCHEME, ATOMIC_BATCH_FLAG, ENTRY_POINT, FRAME_TX_TYPE } from "./codec/FrameTx.ts";
-export type { FrameTransaction, Frame, FrameLimits, SignatureEntry, FeeParams, RecentRootReference, FrameMode, SigScheme, ApproveScope } from "./codec/FrameTx.ts";
+export * from "./tickets.ts";
+export * from "./signer-cli.ts";
+// The keyring with cacheDir and the seed file; these two names win over core's Keyring and KeyringParams.
+export { Keyring, fileLeafCache, loadOrCreateSeed, type KeyringParams } from "./hashsig/keyring.ts";

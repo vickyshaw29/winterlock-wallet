@@ -37,14 +37,22 @@ export class RpcError extends Error {
 /** Tests lower the timeout; nothing else should change it. */
 export const RPC = { timeoutMs: 20_000 };
 
-export async function rpc<T = any>(url: string, method: string, params: unknown[] = []): Promise<T> {
+/**
+ * How a client reaches its server (Nov 6, for browsers and Snaps). fetch defaults to the global one, looked up at every
+ * call, so a wrapper installed later still applies (fakechain's guard); timeoutMs defaults to RPC.timeoutMs, also read
+ * at every call.
+ */
+export interface RpcTransport { fetch?: typeof fetch; timeoutMs?: number }
+
+export async function rpc<T = any>(url: string, method: string, params: unknown[] = [], transport: RpcTransport = {}): Promise<T> {
   let res: Response, text: string;
   try {
-    res = await fetch(url, {
+    const send = transport.fetch ?? fetch; // called unbound: a browser's fetch refuses any other `this`
+    res = await send(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      signal: AbortSignal.timeout(RPC.timeoutMs),
+      signal: AbortSignal.timeout(transport.timeoutMs ?? RPC.timeoutMs),
     });
     text = await res.text();
   } catch (e) {
@@ -185,6 +193,8 @@ export interface SimulationResult {
   frames: { gasUsed: Hex; succeeded: boolean }[] | null;
   executionStatus: "success" | "reverted" | null;
   executionError?: string | null;
+  /** what a reverting frame returned; the account reverts with one 32-byte ASCII reason (Account.yul fail) */
+  revertData?: Hex | null;
   erc7562Trace?: unknown;
   erc7562TraceError?: string | null;
 }
@@ -202,60 +212,86 @@ export function simulationVerdict(r: SimulationResult): { ok: boolean; reason: s
   return { ok: true, reason: null };
 }
 
-/** Sidecar gateway: the alt mempool. */
-export const gateway = {
-  gasPrice: () => rpc<{ maxFeePerGas: Hex; maxPriorityFeePerGas: Hex }>(DEVNET.gateway, "skandha_getGasPrice"),
-  send: (tx: FrameTransaction) => rpc<Hex>(DEVNET.gateway, "eth_sendFrameTransaction", [toWire(tx)]),
-  /**
-   * The sidecar's status for a hash, or null when it answers that it holds no such transaction (a deliberate
-   * "Frame transaction not found", -32600). Throws when it cannot be asked: then nobody knows.
-   */
-  status: async (hash: Hex): Promise<FrameTxStatus | null> => {
-    try {
-      return (await rpc<{ status: FrameTxStatus } | null>(DEVNET.gateway, "skandha_frameTransactionStatus", [hash]))?.status ?? null;
-    } catch (e) {
-      if (e instanceof RpcError && e.refused && e.code === -32600 && /not found/i.test(e.message)) return null;
-      throw e;
-    }
-  },
-  /** Throws while the transaction is not in a block (the sidecar answers "not found" with an error, never null). */
-  receipt: async (hash: Hex) => {
-    const r = await rpc<any>(DEVNET.gateway, "eth_getFrameTransactionReceipt", [hash]);
-    return r ? normalizeNodeReceipt(r) : null;
-  },
-  faucet: (address: Address) => rpc<{ txHash: Hex; amount: string }>(DEVNET.gateway, "skandha_explorer_faucet", [address]),
-  /** The explorer's record, including the per-rule admission report. In memory only: lost on restart. */
-  explorerRecord: (hash: Hex) => rpc<any>(DEVNET.gateway, "skandha_explorer_getTransaction", [hash]),
-};
+/** A client's URL: fixed, or read at every call (the default clients follow DEVNET, which tests repoint). */
+export type RpcUrl = string | (() => string);
+const urlOf = (u: RpcUrl) => (typeof u === "string" ? u : u());
 
-/** ethrex node. */
-export const node = {
-  nonce: async (address: Address, block = "pending") => BigInt(await rpc<Hex>(DEVNET.node, "eth_getTransactionCount", [address, block])),
-  balance: async (address: Address) => BigInt(await rpc<Hex>(DEVNET.node, "eth_getBalance", [address, "latest"])),
-  code: (address: Address) => rpc<Hex>(DEVNET.node, "eth_getCode", [address, "latest"]),
-  storage: (address: Address, slot: Hex) => rpc<Hex>(DEVNET.node, "eth_getStorageAt", [address, slot, "latest"]),
-  /**
-   * Storage at one block. The devnet node serves real state for about the last 126 blocks only; for an older block
-   * it silently answers with the latest state (Day-0 finding, Nov 6), so callers stay within a few blocks of the head.
-   */
-  storageAt: (address: Address, slot: Hex, block: bigint) => rpc<Hex>(DEVNET.node, "eth_getStorageAt", [address, slot, `0x${block.toString(16)}`]),
-  blockNumber: async () => BigInt(await rpc<Hex>(DEVNET.node, "eth_blockNumber")),
-  /** A block's number and timestamp; throws if the node has no such block. */
-  block: async (tag: bigint | "latest") => {
-    const b = await rpc<{ number: Hex; timestamp: Hex } | null>(DEVNET.node, "eth_getBlockByNumber", [typeof tag === "bigint" ? `0x${tag.toString(16)}` : tag, false]);
-    if (!b) throw new Error(`no block ${tag}`);
-    return { number: BigInt(b.number), timestamp: BigInt(b.timestamp) };
-  },
-  /** Timestamp of the latest block: the clock the expiry frame checks. */
-  blockTimestamp: async () => BigInt((await rpc<{ timestamp: Hex }>(DEVNET.node, "eth_getBlockByNumber", ["latest", false])).timestamp),
-  /** The node's own receipt (null until the transaction is in a block), in the sidecar's receipt shape. */
-  receipt: async (hash: Hex) => {
-    const r = await rpc<any>(DEVNET.node, "eth_getTransactionReceipt", [hash]);
-    return r ? normalizeNodeReceipt(r) : null;
-  },
-  /** Dry run with ethrex's own admission checks; trace: true adds the ERC-7562 trace. */
-  simulate: (tx: FrameTransaction, trace = true) =>
-    rpc<SimulationResult>(DEVNET.node, "ethrex_simulateFrameTransaction", [encodeRawFrameTx(tx), "latest", { trace }]),
-  /** The public mempool path: ethrex's own validation, one pending frame tx per sender. */
-  sendRawPublic: (tx: FrameTransaction) => rpc<Hex>(DEVNET.node, "eth_sendRawTransaction", [encodeRawFrameTx(tx)]),
-};
+/** A sidecar gateway client: the alt mempool. */
+export function createGateway(url: RpcUrl, transport: RpcTransport = {}) {
+  const ask = <T>(method: string, params: unknown[] = []) => rpc<T>(urlOf(url), method, params, transport);
+  return {
+    /** Any method, raw: for the calls without a helper below. */
+    request: <T = any>(method: string, params: unknown[] = []) => ask<T>(method, params),
+    gasPrice: () => ask<{ maxFeePerGas: Hex; maxPriorityFeePerGas: Hex }>("skandha_getGasPrice"),
+    send: (tx: FrameTransaction) => ask<Hex>("eth_sendFrameTransaction", [toWire(tx)]),
+    /**
+     * The sidecar's status for a hash, or null when it answers that it holds no such transaction (a deliberate
+     * "Frame transaction not found", -32600). Throws when it cannot be asked: then nobody knows.
+     */
+    status: async (hash: Hex): Promise<FrameTxStatus | null> => {
+      try {
+        return (await ask<{ status: FrameTxStatus } | null>("skandha_frameTransactionStatus", [hash]))?.status ?? null;
+      } catch (e) {
+        if (e instanceof RpcError && e.refused && e.code === -32600 && /not found/i.test(e.message)) return null;
+        throw e;
+      }
+    },
+    /** Throws while the transaction is not in a block (the sidecar answers "not found" with an error, never null). */
+    receipt: async (hash: Hex) => {
+      const r = await ask<any>("eth_getFrameTransactionReceipt", [hash]);
+      return r ? normalizeNodeReceipt(r) : null;
+    },
+    faucet: (address: Address) => ask<{ txHash: Hex; amount: string }>("skandha_explorer_faucet", [address]),
+    /** The explorer's record, including the per-rule admission report. In memory only: lost on restart. */
+    explorerRecord: (hash: Hex) => ask<any>("skandha_explorer_getTransaction", [hash]),
+  };
+}
+
+/** An ethrex node client. */
+export function createNode(url: RpcUrl, transport: RpcTransport = {}) {
+  const ask = <T>(method: string, params: unknown[] = []) => rpc<T>(urlOf(url), method, params, transport);
+  return {
+    /** Any method, raw: for the calls without a helper below. */
+    request: <T = any>(method: string, params: unknown[] = []) => ask<T>(method, params),
+    nonce: async (address: Address, block = "pending") => BigInt(await ask<Hex>("eth_getTransactionCount", [address, block])),
+    balance: async (address: Address) => BigInt(await ask<Hex>("eth_getBalance", [address, "latest"])),
+    code: (address: Address) => ask<Hex>("eth_getCode", [address, "latest"]),
+    storage: (address: Address, slot: Hex) => ask<Hex>("eth_getStorageAt", [address, slot, "latest"]),
+    /**
+     * Storage at one block. The devnet node serves real state for about the last 126 blocks only; for an older block
+     * it silently answers with the latest state (Day-0 finding, Nov 6), so callers stay within a few blocks of the head.
+     */
+    storageAt: (address: Address, slot: Hex, block: bigint) => ask<Hex>("eth_getStorageAt", [address, slot, `0x${block.toString(16)}`]),
+    blockNumber: async () => BigInt(await ask<Hex>("eth_blockNumber")),
+    /** A block's number and timestamp; throws if the node has no such block. */
+    block: async (tag: bigint | "latest") => {
+      const b = await ask<{ number: Hex; timestamp: Hex } | null>("eth_getBlockByNumber", [typeof tag === "bigint" ? `0x${tag.toString(16)}` : tag, false]);
+      if (!b) throw new Error(`no block ${tag}`);
+      return { number: BigInt(b.number), timestamp: BigInt(b.timestamp) };
+    },
+    /** Timestamp of the latest block: the clock the expiry frame checks. */
+    blockTimestamp: async () => BigInt((await ask<{ timestamp: Hex }>("eth_getBlockByNumber", ["latest", false])).timestamp),
+    /** The node's own receipt (null until the transaction is in a block), in the sidecar's receipt shape. */
+    receipt: async (hash: Hex) => {
+      const r = await ask<any>("eth_getTransactionReceipt", [hash]);
+      return r ? normalizeNodeReceipt(r) : null;
+    },
+    /** Dry run with ethrex's own admission checks; trace: true adds the ERC-7562 trace. */
+    simulate: (tx: FrameTransaction, trace = true) =>
+      ask<SimulationResult>("ethrex_simulateFrameTransaction", [encodeRawFrameTx(tx), "latest", { trace }]),
+    /** The public mempool path: ethrex's own validation, one pending frame tx per sender. */
+    sendRawPublic: (tx: FrameTransaction) => ask<Hex>("eth_sendRawTransaction", [encodeRawFrameTx(tx)]),
+    /** The node's view of a transaction, pending or mined; null when it holds no such transaction. */
+    transactionByHash: (hash: Hex) => ask<unknown>("eth_getTransactionByHash", [hash]),
+    /** A read-only call at the latest block, e.g. the account's views. */
+    call: (to: Address, data: Hex) => ask<Hex>("eth_call", [{ to, data }, "latest"]),
+  };
+}
+
+export type GatewayClient = ReturnType<typeof createGateway>;
+export type NodeClient = ReturnType<typeof createNode>;
+
+/** The default sidecar gateway: DEVNET.gateway, read at every call. */
+export const gateway: GatewayClient = createGateway(() => DEVNET.gateway);
+/** The default ethrex node: DEVNET.node, read at every call. */
+export const node: NodeClient = createNode(() => DEVNET.node);

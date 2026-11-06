@@ -528,12 +528,33 @@ describe("second review (Nov 6)", () => {
 describe("grinding the fee (Vicky's decision, Nov 6)", () => {
   test("only the fee moves, one wei per try; the deadline is exact and the signed message fits", async () => {
     const tight = { baseGas: 90_000 - 470 * 66.1, gasPerStep: 66.1 }; // room for 470 steps, below the ~506 average
-    const r = await sendKeyed(base({ grind: tight, expirySeconds: 90 }));
+    let wire: any;
+    const r = await sendKeyed(base({ grind: tight, expirySeconds: 90, onSend: (w) => { wire = w; } }));
     const quoted = 0x77359400n; // the fake sidecar's maxFeePerGas
     expect(BigInt(r.deadline)).toBe(chain.ts(chain.base) + 90n);
+    expect(r.grind!.field).toBe("maxFeePerGas");
     expect(r.grind!.tries.map((t) => t.value)).toEqual(r.grind!.tries.map((_, i) => quoted + BigInt(i)));
+    expect(BigInt(wire.fees.maxFeePerGas)).toBe(r.grind!.tries.at(-1)!.value);
+    expect(BigInt(wire.frames[2].limits.execution)).toBe(50_000n); // the frame limits stay exact
     expect(r.grind!.steps).toBeLessThanOrEqual(470);
     expect(r.grind!.tries.slice(0, -1).every((t) => t.steps > 470)).toBe(true);
+    expect(r.outcome).toBe("OnChain");
+  });
+
+  test("a fee the caller fixed stays exact: the last SENDER frame's limit moves instead, one gas per try (review, Nov 6)", async () => {
+    const tight = { baseGas: 90_000 - 440 * 66.1, gasPerStep: 66.1 }; // room for 440 steps: several tries, usually
+    const fees = { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n }; // below any base fee: a stuck payment must stay stuck
+    let wire: any;
+    const calls = [{ to: BOB, value: 1n }, { to: BOB, value: 2n, gas: 30_000n }];
+    const r = await sendKeyed(base({ grind: tight, fees, calls, expirySeconds: 90, onSend: (w) => { wire = w; } }));
+    expect(BigInt(r.deadline)).toBe(chain.ts(chain.base) + 90n);
+    expect([BigInt(wire.fees.maxFeePerGas), BigInt(wire.fees.maxPriorityFeePerGas)]).toEqual([1n, 1n]);
+    expect(r.grind!.field).toBe("lastFrameGas");
+    expect(r.grind!.tries.map((t) => t.value)).toEqual(r.grind!.tries.map((_, i) => 30_000n + BigInt(i)));
+    // only the last frame moved: the expiry, verify and first transfer frames keep their limits
+    expect(wire.frames.map((f: any) => BigInt(f.limits.execution))).toEqual([5_000n, 90_000n, 50_000n, r.grind!.tries.at(-1)!.value]);
+    expect(r.grind!.steps).toBeLessThanOrEqual(440);
+    expect(r.grind!.tries.slice(0, -1).every((t) => t.steps > 440)).toBe(true);
     expect(r.outcome).toBe("OnChain");
   });
 
@@ -546,6 +567,157 @@ describe("grinding the fee (Vicky's decision, Nov 6)", () => {
       expect(r.grind!.steps).toBeLessThanOrEqual(r.grind!.maxSteps);
       expect(r.grind!.maxSteps).toBe(maxStepsFor({ ...GRIND.hot, verifyGasLimit: 90_000n }));
     }
+  });
+});
+
+describe("onSubmitted (for the backend, Nov 6)", () => {
+  test("called once, right after the send and before following, with the leaf, key, hash and deadline", async () => {
+    const calls: any[] = [];
+    let atCall: any, headAtCall = 0n;
+    const r = await sendKeyed(base({ onSubmitted: (s) => { calls.push(s); atCall = { ...journal.get(s.leaf) }; headAtCall = chain.head; } }));
+    expect(calls).toEqual([{ leaf: r.leaf, nonceKey: r.nonceKey, txHash: r.txHash, deadline: r.deadline, altHashes: [], accepted: true, simulation: null }]);
+    expect(atCall.status).toBe("submitted");
+    expect(headAtCall).toBe(sends[0]!.at); // no block was polled between the send and the call
+    expect(r.outcome).toBe("OnChain");
+  });
+
+  test("with a preflight, it carries the dry run the transaction was checked with (its maxCost is the lane's set-aside)", async () => {
+    const calls: any[] = [];
+    const dryRun = { ...VALID, maxCost: "0x2a" };
+    n.simulate = async () => dryRun;
+    const r = await sendKeyed(base({ preflight: true, onSubmitted: (s) => calls.push(s) }));
+    expect(calls.map((c) => c.simulation)).toEqual([dryRun]);
+    expect(r.simulation as unknown).toEqual(dryRun);
+  });
+
+  test("a lost answer: accepted is false, and the transaction is still followed to its end", async () => {
+    const calls: any[] = [];
+    g.send = async (tx: FrameTransaction) => { const h = frameTxHash(tx); hold(tx, h); chain.include(tx, h); throw lost("eth_sendFrameTransaction"); };
+    const r = await sendKeyed(base({ onSubmitted: (s) => calls.push(s) }));
+    expect(calls.map((c) => c.accepted)).toEqual([false]);
+    expect(r.outcome).toBe("OnChain");
+  });
+
+  test("a throwing callback changes nothing: followed, journaled, and noted on the leaf", async () => {
+    const r = await sendKeyed(base({ onSubmitted: () => { throw new Error("store full"); } }));
+    expect(r.outcome).toBe("OnChain");
+    expect(journal.get(r.leaf)?.status).toBe("onchain");
+    expect(journal.get(r.leaf)?.note).toContain("onSubmitted failed: store full");
+    expect(sends.length).toBe(1);
+  });
+
+  test("a rejecting async callback changes nothing either", async () => {
+    const r = await sendKeyed(base({ onSubmitted: async () => { throw new Error("late"); } }));
+    expect(r.outcome).toBe("OnChain");
+    expect(journal.get(r.leaf)?.status).toBe("onchain");
+    expect(journal.get(r.leaf)?.note).toContain("onSubmitted failed: late");
+  });
+
+  test("not called when the submission is refused", async () => {
+    const calls: any[] = [];
+    g.send = async () => { throw answered("eth_sendFrameTransaction", -32602, "nope"); };
+    expect(await sendKeyed(base({ onSubmitted: (s) => calls.push(s) })).catch((e) => e)).toBeInstanceOf(SubmissionRefused);
+    expect(calls).toEqual([]);
+  });
+
+  test("with retries: once per attempt, each on its own leaf", async () => {
+    const calls: any[] = [];
+    const r = await sendWithRetry({ ...base(), attempts: 3, firstAttempt: { expirySeconds: 1 }, dropWaitMs: 0, onSubmitted: (s) => calls.push(s) });
+    expect(r.attempts.map((a) => a.outcome)).toEqual(["Expired", "OnChain"]);
+    expect(calls.map((c) => c.txHash)).toEqual(r.attempts.map((a) => a.txHash));
+    expect(calls[0].leaf).not.toBe(calls[1].leaf);
+  });
+});
+
+describe("mempool \"public\" (for the backend, Nov 6)", () => {
+  let publicSends: Hex[], explorerCalls: number, byHashCalls: number;
+  const publicSend = async (tx: FrameTransaction) => { const h = frameTxHash(tx); publicSends.push(h); chain.include(tx, h); return h; };
+  beforeEach(() => {
+    publicSends = [];
+    explorerCalls = 0;
+    byHashCalls = 0;
+    n.sendRawPublic = publicSend;
+    n.transactionByHash = async () => { byHashCalls++; throw new Error("not expected here"); };
+    g.send = async () => { throw new Error("a public send must not touch the sidecar"); };
+    g.explorerRecord = async () => { explorerCalls++; return null; };
+  });
+
+  test("sent to the node's pool and followed to OnChain; no admission report is asked for", async () => {
+    const r = await sendKeyed(base({ mempool: "public", admission: true }));
+    expect(r.outcome).toBe("OnChain");
+    expect(publicSends).toEqual([r.txHash]);
+    expect(sends.length).toBe(0);
+    expect([r.admission, explorerCalls]).toEqual([null, 0]);
+  });
+
+  test("a deliberate refusal for a hash the node does not hold: SubmissionRefused, leaf burned, no admission", async () => {
+    n.sendRawPublic = async () => { throw answered("eth_sendRawTransaction", -32000, "txpool: one pending frame transaction per sender"); };
+    n.transactionByHash = async () => { byHashCalls++; return null; };
+    const err = await sendKeyed(base({ mempool: "public", admission: true })).catch((e) => e);
+    expect(err).toBeInstanceOf(SubmissionRefused);
+    expect(journal.get(err.leaf)?.status).toBe("burned");
+    expect([err.admission, explorerCalls, byHashCalls]).toEqual([null, 0, 1]);
+  });
+
+  test("a refusal while the node holds the transaction: followed", async () => {
+    n.sendRawPublic = async (tx: FrameTransaction) => { chain.include(tx, frameTxHash(tx)); throw answered("eth_sendRawTransaction", -32000, "late failure"); };
+    n.transactionByHash = async (h: Hex) => ({ hash: h });
+    expect((await sendKeyed(base({ mempool: "public" }))).outcome).toBe("OnChain");
+  });
+
+  test("a refusal while the node cannot be asked: followed, never burned", async () => {
+    n.sendRawPublic = async (tx: FrameTransaction) => { chain.include(tx, frameTxHash(tx)); throw answered("eth_sendRawTransaction", -32000, "refused"); };
+    n.transactionByHash = async () => { throw lost("eth_getTransactionByHash"); };
+    const r = await sendKeyed(base({ mempool: "public" }));
+    expect(r.outcome).toBe("OnChain");
+    expect(journal.get(r.leaf)?.note).toContain("send outcome unknown");
+  });
+
+  test("'already known' is followed without asking the node", async () => {
+    n.sendRawPublic = async (tx: FrameTransaction) => { chain.include(tx, frameTxHash(tx)); throw answered("eth_sendRawTransaction", -32000, "already known"); };
+    expect((await sendKeyed(base({ mempool: "public" }))).outcome).toBe("OnChain");
+    expect(byHashCalls).toBe(0);
+  });
+
+  test("a retry after an expired public attempt waits until the node drops it; the sidecar never saw it (review, Nov 6)", async () => {
+    const byHashAtSend: number[] = [];
+    n.sendRawPublic = async (tx: FrameTransaction) => {
+      const h = frameTxHash(tx);
+      byHashAtSend.push(byHashCalls);
+      publicSends.push(h);
+      if (publicSends.length > 1) chain.include(tx, h); // the first attempt is never mined: it expires
+      return h;
+    };
+    n.transactionByHash = async (h: Hex) => { byHashCalls++; return byHashCalls < 3 ? { hash: h } : null; }; // held for two looks
+    g.status = async () => null; // what the sidecar says of every hash it never saw: "gone", which proves nothing here
+    const r = await sendWithRetry({ ...base({ mempool: "public" }), attempts: 2, firstAttempt: { expirySeconds: 1 }, dropWaitMs: 1_000 });
+    expect(r.attempts.map((a) => a.outcome)).toEqual(["Expired", "OnChain"]);
+    expect(byHashAtSend).toEqual([0, 3]); // the retry went out only after the node answered null
+  });
+
+  test("the default is still the sidecar, exactly as before", async () => {
+    g.send = async (tx: FrameTransaction) => { const h = frameTxHash(tx); sends.push({ hash: h, at: chain.head }); chain.include(tx, h); return h; };
+    n.sendRawPublic = async () => { throw new Error("the public pool must not be used by default"); };
+    const r = await sendKeyed(base());
+    expect(r.outcome).toBe("OnChain");
+    expect([sends.length, publicSends.length]).toEqual([1, 0]);
+  });
+});
+
+describe("a refusal carries the dry run (for the backend's 422, Nov 6)", () => {
+  test("PreflightRefused carries the simulation and its revert data", async () => {
+    const sim = { ...VALID, canonicalMempoolValid: false, canonicalMempoolViolation: "frame 1 reverted", executionStatus: "reverted", revertData: `0x${Buffer.from("hot: value cap").toString("hex").padEnd(64, "0")}` };
+    n.simulate = async () => sim;
+    const err = await sendKeyed(base({ preflight: true })).catch((e) => e);
+    expect(err).toBeInstanceOf(PreflightRefused);
+    expect(err.simulation).toEqual(sim);
+  });
+
+  test("SubmissionRefused carries the dry run that passed before the refusal", async () => {
+    g.send = async () => { throw answered("eth_sendFrameTransaction", -32602, "validation prefix execution gas sum exceeds MAX_VERIFY_GAS"); };
+    const err = await sendKeyed(base({ preflight: true })).catch((e) => e);
+    expect(err).toBeInstanceOf(SubmissionRefused);
+    expect(err.simulation).toEqual(VALID);
   });
 });
 

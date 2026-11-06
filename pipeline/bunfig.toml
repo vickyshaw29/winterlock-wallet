@@ -1,0 +1,3 @@
+[test]
+# pipeline/test only: the example Snap's jest test runs in MetaMask's Snap simulator (cd examples/snap && npm test)
+root = "./test"

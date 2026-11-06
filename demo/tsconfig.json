@@ -1,4 +1,6 @@
 {
+  // The scene scripts and their tests (Bun types); the tests also check the backend and pipeline files they import.
+  // Edited for the parallel-lanes CLI with Claude Code (AI) for Vicky.
   "compilerOptions": {
     // Environment setup & latest features
     "lib": ["ESNext"],
@@ -26,5 +28,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "include": ["*.ts", "test/**/*.ts"]
 }
