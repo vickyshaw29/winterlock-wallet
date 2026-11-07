@@ -67,57 +67,6 @@ devnet.
 Together they close a cheap attack: park thousands of low-tip lanes from one address, and make the node re-check all of
 them every block.
 
-## Why use it
-
-- **The protocol keeps the record of used keys.** Leaf *i* signs only a transaction whose nonce key is *i*, at
-  sequence 0 (`account/yul/Account.yul:54-61`). EIP-8250 marks that key used when the payment is approved, so a second
-  payment on it is refused by the protocol itself: `Nonce mismatch: expected 1, got 0`. The verify frame contains no
-  `sstore` (`Account.yul:46-116`).
-- **Frame transactions leave no other safe place for that record.** The verify frame runs as a static call, so it
-  cannot write "this key is used". A write in a later SENDER frame comes after approval, when two pending transactions
-  in two lanes could both have passed against the same key. Consuming the nonce is the one state change the protocol
-  makes in the same step as payment approval.
-- **Many hash-signed payments from one account are pending at once.** Eight payments on eight nonce keys were admitted
-  and pending together, and landed in two blocks of four (2,272 and 2,275). Given the same burst, the public mempool
-  kept one and refused the next: `A pending frame transaction from this sender is already in the pool`.
-- **A stuck payment is never fee-bumped.** A replacement would sign the same one-time key twice, and two signatures
-  from one WOTS+ key let anyone forge a third. So a stuck payment waits out its deadline (an expiry frame the chain
-  checks), its leaf is burned, and the retry goes out on a fresh key. Measured: the first attempt expired with its key
-  unused at block 2,285, and the retry was included at 2,293.
-- **Hot tickets carry caps the account enforces.** A phone or an agent holds a few one-time keys and no seed. The
-  account refuses a payment above the value cap, to any other address, or after the kill switch, and names the rule it
-  broke: `hot: value cap`, `hot: frame target`, `hot: disabled`. All three were refused on the devnet.
-- **It fits EIP-8141's 100,000-gas validation cap.** So it is valid in any mempool that follows the rules, the public
-  one or the alt one, with no stake and no patched sidecar. We fit the rule itself, not just one node's setting. The
-  signer changes the fee a little until the message needs few enough hash steps, then signs once: 88,373 gas used of
-  90,000 declared, at 510 steps.
-- **The chain's own verifier refuses forgeries**, including a valid signature of leaf A sent under leaf B's nonce key.
-- **It sends from MetaMask.** MetaMask cannot build a frame transaction, but MetaMask Flask can send an ERC-4337 user
-  operation for an Account Snap's account. The Winterlock Snap is that account, and the local bundler unwraps the signed
-  frame transaction it carries: MetaMask's own confirmation screen, a fresh one-time key per payment, a frame
-  transaction on chain. Nothing on chain is ERC-4337.
-- **Three implementations agree, and 761 tests run offline.** The Rust signer's test vectors pass the TypeScript
-  verifier; the TypeScript signer's vectors pass the Yul verifier and Quip Network's audited `WOTSPlus.sol`, used as an
-  oracle for the signature format.
-
-## Why you might not
-
-- **Each payment costs about 186,000 gas**, nearly nine times a plain 21,000-gas transfer. The 2,594-byte signature
-  sets the bill through the calldata floor of 64 gas a byte; the hashing does not. A shorter signature would lower the
-  cost, and cheaper hashing would not.
-- **The keys run out.** One tree holds 1,024 keys per chain at height 10, 16 of them hot tickets. After that the tree is
-  rotated, and a rotation cancels every pending lane.
-- **The signer must keep a journal.** The chain learns of a key only when its payment lands. Until then, only the
-  signer's journal stops it from signing a second, different message with the same key. A seed alone is not enough to
-  resume signing safely: after restoring one, rotate first.
-- **The classical co-signature is built but off.** The account can require an owner ECDSA signature beside the
-  hash-based one. The backend refuses to create such a wallet, and no measured profile uses it.
-- **Hot tickets do not expire on their own yet.** Expiry through EIP-8272 recent roots, and a certified hypertree that
-  grows without cancelling lanes, are designed and not built.
-- **It runs on one devnet, with that devnet's quirks**: send through the miner's own sidecar, keep a 3 gwei floor on
-  the priority fee, and expect at most four lanes relayed per 10-second pass ([evidence](#devnet-evidence)).
-- **The nonce key shows the leaf number on chain**, so anyone can count how many keys an account has used.
-
 ## What is real, and what is not
 
 | Part | Status |
