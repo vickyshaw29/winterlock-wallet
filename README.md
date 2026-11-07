@@ -7,9 +7,17 @@ payment's own EIP-8250 nonce key. The protocol consumes the nonce key in the sam
 retires the key too. The account never records which keys it has used: no bitmap, no counter, no storage write during
 validation.
 
-Because every payment has its own nonce key, one account can have many hash-signed payments pending at once on the
-ERC-8421 alternative mempool, where the public mempool holds one per sender. And it sends from MetaMask Flask: a Snap
-makes the account a MetaMask account, and a local bundler carries its frame transactions to the alt mempool.
+Every payment has its own nonce key, so one account can have many payments pending at the same time on the ERC-8421
+alternative mempool. The public mempool can't do this for us. Our verify step reads the account's own storage, and for
+an account like that, ethrex's public pool allows only one pending transaction per sender. The alt mempool gives each
+nonce key its own slot. We measured both: 8 of 8 payments pending together on the alt mempool, and 1 of 8 on the
+public one.
+
+It also sends from MetaMask Flask. A Snap makes the account a MetaMask account, and a small local bundler carries its
+frame transactions to the alt mempool.
+
+While building it, we also found and fixed two problems in the alt mempool itself, and opened a PR for each:
+[What we fixed in the alt mempool](#what-we-fixed-in-the-alt-mempool).
 
 Built at ETHGlobal Mumbai 2026 for the Ethereum Foundation's
 [*Best use of the Frame Transaction Alternative Mempool*](https://ethglobal.com/events/mumbai/prizes/ethereum-foundation)
@@ -32,11 +40,32 @@ account 0xf3e63d269dae09032ea950cd9722733e9b3f2d37 (real verifier), 0.2 ETH
    OK a valid signature of leaf A under leaf B's nonce key     sig: hash-based check
 ```
 
-**[Measured](#measured)** · [Quickstart](#quickstart) · [How it works](#how-it-works) ·
+**[Measured](#measured)** · [Sidecar PRs](#what-we-fixed-in-the-alt-mempool) · [Quickstart](#quickstart) · [How it works](#how-it-works) ·
 [From MetaMask](#send-from-metamask) · [Deployed](#deployed-on-the-devnet) · [Design](#design) · [Gas](#gas) ·
 [Parallel lanes](#parallel-lanes) · [Evidence](#devnet-evidence) · [Trade-offs](#trade-offs) ·
 [Prior art](#prior-art) · [CROPS](#crops) · [ETHGlobal](#ethglobal-mumbai-2026) · [Limitations](#known-limitations) ·
 [Authorship](#authorship-and-ai-use)
+
+## What we fixed in the alt mempool
+
+To understand how many payments one account can keep pending, we read the code of the sidecar, the ERC-8421 mempool
+this devnet runs. We found two problems, fixed both, and opened a PR for each. Both fixes were tested live on this
+devnet.
+
+- **[#5: only recheck pending transactions that a new block actually touched](https://github.com/forshtat/mempool-workshop-sidecar/pull/5).**
+  After every block, the sidecar re-simulated every pending transaction, with no limit. Now it reads the block's
+  access list (EIP-7928) and rechecks a transaction only if something it depends on changed: a storage slot it read,
+  its sender or payer account, or its nonce key. It rechecks at most 50 per block, and when it can't be sure (a reorg,
+  or an access list it can't read), it rechecks everything like before. On the devnet, 4 pending lanes went from 4
+  simulations every block to 0.
+- **[#6: cap pending transactions per unstaked sender at 64](https://github.com/forshtat/mempool-workshop-sidecar/pull/6).**
+  A keyed transaction that pays for itself skipped every per-sender cap, so one address could park any number of
+  transactions. ERC-8421 (LIFECYCLE-030) allows 64 for an unstaked sender. The PR enforces that limit, closes a way to
+  bring cancelled transactions back in past the cap, and fixes a config whitelist lookup that only ever worked for
+  factories.
+
+Together they close a cheap attack: park thousands of low-tip lanes from one address, and make the node re-check all of
+them every block.
 
 ## Why use it
 
@@ -58,8 +87,10 @@ account 0xf3e63d269dae09032ea950cd9722733e9b3f2d37 (real verifier), 0.2 ETH
 - **Hot tickets carry caps the account enforces.** A phone or an agent holds a few one-time keys and no seed. The
   account refuses a payment above the value cap, to any other address, or after the kill switch, and names the rule it
   broke: `hot: value cap`, `hot: frame target`, `hot: disabled`. All three were refused on the devnet.
-- **It fits the 100,000-gas verification cap** that the devnet enforces on every transaction. The signer nudges the
-  fee until the message needs few enough hash steps, then signs once: 88,373 gas used of 90,000 declared, at 510 steps.
+- **It fits EIP-8141's 100,000-gas validation cap.** So it is valid in any mempool that follows the rules, the public
+  one or the alt one, with no stake and no patched sidecar. We fit the rule itself, not just one node's setting. The
+  signer changes the fee a little until the message needs few enough hash steps, then signs once: 88,373 gas used of
+  90,000 declared, at 510 steps.
 - **The chain's own verifier refuses forgeries**, including a valid signature of leaf A sent under leaf B's nonce key.
 - **It sends from MetaMask.** MetaMask cannot build a frame transaction, but MetaMask Flask can send an ERC-4337 user
   operation for an Account Snap's account. The Winterlock Snap is that account, and the local bundler unwraps the signed
@@ -209,7 +240,8 @@ Think of a cheque book.
   still shows the key unused, the payment can never land (`waitForInclusion` in `pipeline/src/submit.ts`). The wallet
   marks that cheque burned and pays again with the next one, on a new nonce key: a new lane.
 - **Many cheques can be in flight at once.** Every payment has its own key, and the devnet's alt mempool holds one
-  pending transaction per key, with no cap per account ([Parallel lanes](#parallel-lanes)).
+  pending transaction per key, with no cap per account yet ([Parallel lanes](#parallel-lanes); our PR
+  [#6](https://github.com/forshtat/mempool-workshop-sidecar/pull/6) adds ERC-8421's cap of 64).
 
 ```
  web/ ──HTTP──▶ backend/ ──▶ pipeline/ ─── alt ───▶ ERC-8421 sidecar ──▶ ethrex node ──▶ account/
@@ -393,7 +425,7 @@ miner's sidecar may not appear there.
 | Eight lanes at once, then the same eight on the public mempool | [docs/devnet-evidence.md](docs/devnet-evidence.md#parallel-lanes-and-the-stuck-payment) | 2,272 to 2,275; 5,729 and 5,730 |
 | Sent from MetaMask Flask | `0xfce762a999fec43241b92f086a643265d0977f6d42511da6fe814f303a46d56a` | 5,703 |
 
-Every transaction behind the numbers, the three screens end to end, the earlier chain, the Day-0 probe results, and the divergences from the drafts we found and reported: [docs/devnet-evidence.md](docs/devnet-evidence.md).
+Every transaction behind the numbers, the three screens end to end, the earlier chain, the Day-0 probe results, and the divergences from the drafts we found: [docs/devnet-evidence.md](docs/devnet-evidence.md). Two of our findings became sidecar PRs: [#5](https://github.com/forshtat/mempool-workshop-sidecar/pull/5) and [#6](https://github.com/forshtat/mempool-workshop-sidecar/pull/6).
 
 ## Trade-offs
 
@@ -481,6 +513,10 @@ prize. What the prize asks for, where it is in this repository, and where it sho
 | A frame-transaction application on the alt mempool; area one names "PQ-secure smart wallets" | The account (`account/`), the pipeline (`pipeline/`), the backend and the three screens. The verify frame fits the 100,000 cap; what needs the alt mempool is many hash-signed payments from one account pending at once ([Parallel lanes](#parallel-lanes)) |
 | An admitted transaction on the devnet explorer | [`0x3446d855…`](https://explorer.altmempool.wtf/tx/0x3446d855f87b963451f0570105814ddf64d4a9237c5642d172430eebca883175), block 386, 17 of 17 rules passed, and every transaction in [Devnet evidence](docs/devnet-evidence.md) |
 | The ability to explain the design, the code and the trade-offs | [Design](#design), [Gas](#gas), [Trade-offs](#trade-offs), and the verify frame line by line in `account/yul/Account.yul` |
+
+We also improved the alt mempool itself: two PRs to the sidecar, [#5](https://github.com/forshtat/mempool-workshop-sidecar/pull/5)
+(recheck only what a block changed) and [#6](https://github.com/forshtat/mempool-workshop-sidecar/pull/6) (the
+64-per-sender cap), both tested live on this devnet. See [What we fixed in the alt mempool](#what-we-fixed-in-the-alt-mempool).
 
 The demo runs the three screens on the devnet: hot and cold first (parallel lanes, the stuck payment and its retry,
 the public mempool's refusal), then the agent (four tranches in one block, the two named refusals), then the session
