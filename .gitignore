@@ -1,1 +1,6 @@
 .claude
+.DS_Store
+.data/
+target/
+learning/
+GITHUB_PAT_SETUP.md

@@ -307,7 +307,9 @@ export function HotColdPage() {
                 aria-label="Latest payment"
               >
                 <span className="activity-label">Latest payment</span>
-                <strong>{statusOf(latest).label}</strong>
+                <strong className="pill" data-state={statusOf(latest).key}>
+                  {statusOf(latest).label}
+                </strong>
                 <span className="hint">
                   Leaf {latest.leaf} · {shortHex(latest.txHash)}
                 </span>
@@ -588,8 +590,9 @@ function ColdForms({ offline }: { offline: boolean }) {
             })}
           >
             <p className="hint">
-              {available} hot leaves not cut yet. Every exported leaf is
-              reserved immediately.
+              {available} hot leaves not cut yet. The cold device writes them
+              to a ticket file for the phone: each leaf's secrets and path,
+              never the seed. Every exported leaf is reserved immediately.
             </p>
             {s.deviceFault && <p className="warning">{s.deviceFault}</p>}
             <div className="row">

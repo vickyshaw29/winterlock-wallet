@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -8,16 +7,7 @@ import {
   type InputHTMLAttributes,
 } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
-import {
-  Wallet,
-  Smartphone,
-  TrendingUp,
-  Grid2X2,
-  Moon,
-  Sun,
-  Copy,
-  MoreHorizontal,
-} from "lucide-react";
+import { Moon, Sun, Copy, MoreHorizontal } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
@@ -41,6 +31,7 @@ import {
 } from "../lib/api";
 import {
   LEAF_WORDS,
+  countStates,
   leafStates,
   nextTicket,
   stubsOf,
@@ -198,28 +189,36 @@ export function Shell({
         </Link>
         <nav className="screens" aria-label="Screens">
           {[
-            ["/", "Wallets", Wallet],
-            ["/hot-cold.html", "Pay", Smartphone],
-            ["/agent.html", "Agent", TrendingUp],
-            ["/session.html", "Session", Grid2X2],
-          ].map(([path, label, Icon]) => {
-            const Component = Icon as typeof Wallet;
+            ["/", "Wallets"],
+            ["/hot-cold.html", "Pay"],
+            ["/agent.html", "Agent"],
+            ["/session.html", "Session"],
+          ].map(([path, label]) => {
             const active =
               location.pathname === path ||
               (path === "/" && location.pathname === "/index.html");
             return (
               <Link
-                key={path as string}
-                to={href(path as string)}
+                key={path}
+                to={href(path!)}
                 aria-current={active ? "page" : undefined}
               >
-                <Component aria-hidden="true" />
-                <span>{label as string}</span>
+                {label}
               </Link>
             );
           })}
+          <a href="http://localhost:15190">Flask</a>
         </nav>
         <div className="rail-foot">
+          <span
+            className="network-pill"
+            data-state={stall || status?.stalled ? "stalled" : undefined}
+          >
+            {status?.chainId
+              ? `Chain ${status.chainId}${status.head === null ? "" : ` · block ${status.head.toLocaleString("en-US")}`}`
+              : "Checking network"}
+          </span>
+          {screen !== "index" && <MempoolSwitch />}
           <button
             type="button"
             className="theme-toggle"
@@ -235,6 +234,11 @@ export function Shell({
           </button>
         </div>
       </header>
+      {status?.fake && (
+        <p className="sim-bar">
+          <span className="badge-fake">Local simulation · no EVM</span>
+        </p>
+      )}
       {banner && (
         <div className="banner-wrap">
           <div className="banner" role="alert">
@@ -253,9 +257,6 @@ export function Shell({
         </p>
       )}
       <footer className="status-line" aria-label="Status">
-        {status?.fake && (
-          <span className="badge-fake">Local simulation · no EVM</span>
-        )}
         {status ? (
           statusWords(status).map((word) => <span key={word}>{word}</span>)
         ) : (
@@ -273,55 +274,37 @@ export function Shell({
 export function Intro({
   title,
   description,
-  mempool = true,
 }: {
   title: string;
   description: string;
-  mempool?: boolean;
 }) {
-  const state = useWallet();
   return (
     <section className="page-intro" aria-labelledby="page-title">
-      <div>
-        <h1 id="page-title">{title}</h1>
-        <p>{description}</p>
-      </div>
-      <div className="workspace-context">
-        <span
-          className="network-pill"
-          data-state={state.stall ? "stalled" : undefined}
-        >
-          {state.status?.fake
-            ? "Local simulation"
-            : state.status?.chainId
-              ? `Chain ${state.status.chainId}`
-              : "Checking network"}
-        </span>
-        {mempool && (
-          <div className="controls">
-            <span id="mempool-label">Mempool</span>
-            <div
-              className="segmented"
-              role="radiogroup"
-              aria-labelledby="mempool-label"
-            >
-              {(["alt", "public"] as const).map((mode) => (
-                <label key={mode}>
-                  <input
-                    type="radio"
-                    name="mempool"
-                    value={mode}
-                    checked={state.mempool === mode}
-                    onChange={() => state.setMempool(mode)}
-                  />
-                  <span>{mode}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <h1 id="page-title">{title}</h1>
+      <p>{description}</p>
     </section>
+  );
+}
+function MempoolSwitch() {
+  const state = useWallet();
+  return (
+    <div className="controls">
+      <span id="mempool-label">Mempool</span>
+      <div className="segmented" role="radiogroup" aria-labelledby="mempool-label">
+        {(["alt", "public"] as const).map((mode) => (
+          <label key={mode}>
+            <input
+              type="radio"
+              name="mempool"
+              value={mode}
+              checked={state.mempool === mode}
+              onChange={() => state.setMempool(mode)}
+            />
+            <span>{mode}</span>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 export function AccountSummary() {
@@ -448,37 +431,76 @@ export function TicketStrip() {
     </ol>
   );
 }
+const SHEET_ORDER = ["unused", "onchain", "hot", "phone", "flight", "burned"] as const;
 export function KeyRegister() {
   const { wallet: w, records } = useWallet();
+  const [at, setAt] = useState<number | null>(null);
   if (!w) return null;
   const states = leafStates(w, records);
+  const counts = countStates(states);
+  const move = (to: number) => setAt(Math.max(0, Math.min(states.length - 1, to)));
   return (
-    <details className="tree-inspector">
-      <summary>
+    <section className="key-sheet" aria-labelledby="key-sheet-title">
+      <h4 id="key-sheet-title">
         Key register<span>Every leaf, by state</span>
-      </summary>
-      <div
-        className="register"
-        role="img"
-        aria-label={`${w.leafCount} one-time keys, ${w.leavesUsed} reserved or used`}
-      >
-        {states.map((s, i) => (
-          <span
-            key={i}
-            className={`leaf-cell is-${s}`}
-            title={`Leaf ${i}: ${LEAF_WORDS[s]}`}
-          />
-        ))}
+      </h4>
+      <div className="sheet-body">
+        <div
+          className="register"
+          role="img"
+          tabIndex={0}
+          aria-label={`${w.leafCount} one-time keys, ${w.leavesUsed} reserved or used`}
+          aria-describedby="key-readout"
+          onPointerOver={(e) => {
+            const leaf = (e.target as HTMLElement).dataset.leaf;
+            if (leaf) setAt(Number(leaf));
+          }}
+          onPointerLeave={() => setAt(null)}
+          onBlur={() => setAt(null)}
+          onKeyDown={(e) => {
+            const step = {
+              ArrowRight: 1,
+              ArrowLeft: -1,
+              ArrowDown: 32,
+              ArrowUp: -32,
+            }[e.key];
+            if (step === undefined) return;
+            e.preventDefault();
+            move((at ?? -step) + step);
+          }}
+        >
+          {states.map((s, i) => (
+            <span
+              key={i}
+              data-leaf={i}
+              className={`leaf-cell is-${s}${i >= w.hotStart ? " in-hot" : ""}${i === at ? " at" : ""}`}
+              title={`Leaf ${i}: ${LEAF_WORDS[s]}`}
+            />
+          ))}
+        </div>
+        <div className="sheet-side">
+          <p className="sheet-readout" id="key-readout">
+            {at === null ? (
+              "Point at a key, or focus the sheet and use the arrow keys."
+            ) : (
+              <>
+                <span className="mono">Leaf {at}</span>
+                {` · ${LEAF_WORDS[states[at]!]}${at >= w.hotStart ? ", hot band" : ""}`}
+              </>
+            )}
+          </p>
+          <ul className="legend">
+            {SHEET_ORDER.map((s) => (
+              <li key={s}>
+                <i className={`leaf-cell is-${s}`} aria-hidden="true" />
+                <span>{LEAF_WORDS[s]}</span>
+                <span className="mono">{counts[s].toLocaleString("en-US")}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-      <ul className="legend">
-        {Object.entries(LEAF_WORDS).map(([s, word]) => (
-          <li key={s}>
-            <i className={`leaf-cell is-${s}`} aria-hidden="true" />
-            {word}
-          </li>
-        ))}
-      </ul>
-    </details>
+    </section>
   );
 }
 export function nextLeaf(

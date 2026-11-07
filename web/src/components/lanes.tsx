@@ -156,46 +156,36 @@ export function LaneBoard({
                     <td className="gas num">{row.gas}</td>
                     <td className="status-cell">
                       <div className="st">
-                        <div className="st-main">
-                          <div className="st-words">
-                            <span className="row-status">
-                              {row.status.label}
-                            </span>
-                            {safeExplorer(row.explorerUrl) && (
-                              <a
-                                className="explorer"
-                                href={row.explorerUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                explorer
-                              </a>
-                            )}
-                          </div>
-                          {row.refusal && (
-                            <p className="refusal">{row.refusal.words}</p>
-                          )}
-                          <ol className="steps">
-                            {row.steps.map((step, j) => (
-                              <li
-                                className={`step step-${step.key} ${j === row.steps.length - 1 ? "current" : ""}`}
-                                key={step.key}
-                              >
-                                <i className="dot" aria-hidden="true" />
-                                <span className="step-label">{step.label}</span>
-                                <span className="when">
-                                  +{(step.at / 1000).toFixed(1)} s
-                                </span>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                        {stamp && (
-                          <span className="stamp">
-                            burned<small>{stamp.words}</small>
-                          </span>
-                        )}
+                        <span
+                          className="row-status pill"
+                          data-state={row.status.key}
+                        >
+                          {row.status.label}
+                        </span>
+                        <Track row={row} />
                       </div>
+                      {row.refusal && (
+                        <p className="refusal">{row.refusal.words}</p>
+                      )}
+                      {(stamp || safeExplorer(row.explorerUrl)) && (
+                        <p className="st-meta">
+                          {stamp && (
+                            <span className="stamp">
+                              burned <small>{stamp.words}</small>
+                            </span>
+                          )}
+                          {safeExplorer(row.explorerUrl) && (
+                            <a
+                              className="explorer"
+                              href={row.explorerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              explorer
+                            </a>
+                          )}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 </Fragment>
@@ -226,6 +216,43 @@ export function LaneBoard({
     </section>
   );
 }
+type Row = ReturnType<typeof laneRows>[number];
+const TRACK = [
+  ["Signed", ["sent", "admitted", "pending", "key", "included", "reverted", "expired", "refused", "retried", "unknown"]],
+  ["Admitted", ["admitted", "pending", "key", "included", "reverted"]],
+  ["OnChain", ["included", "reverted"]],
+] as const;
+function Track({ row }: { row: Row }) {
+  const failed = ["refused", "expired", "reverted"].includes(row.status.key);
+  const reached = TRACK.map(([, keys]) =>
+    row.steps.find((step) => (keys as readonly string[]).includes(step.key)),
+  );
+  reached[0] ??= row.steps[0];
+  const last = reached.reduce((n, step, i) => (step ? i : n), 0);
+  return (
+    <ol className="track" aria-label="Signed, admitted, on chain">
+      {TRACK.map(([label], i) => {
+        const step = reached[i];
+        const state =
+          failed && (row.status.key === "reverted" ? i === 2 : i === last + 1)
+            ? "bad"
+            : !step
+              ? "todo"
+              : row.status.key === "included"
+                ? "ok"
+                : failed
+                  ? "done"
+                  : "wait";
+        const words = `${label}${step ? ` +${(step.at / 1000).toFixed(1)} s` : state === "bad" ? `: ${row.status.label}` : ", not yet"}`;
+        return (
+          <li key={label} data-state={state} title={words}>
+            <span className="visually-hidden">{words}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 function safeExplorer(url: string) {
   try {
     return ["http:", "https:"].includes(new URL(url).protocol);
@@ -252,6 +279,11 @@ function LaneEvidence({
       <p>{detail.error ? errorText(detail.error) : "Loading evidence…"}</p>
     );
   const gas = r.gas;
+  // floorGas is the fixed part plus 64 per billed byte (ethrex's floor billing)
+  const floorOnly =
+    gas?.billedBytes != null ? BigInt(gas.billedBytes) * 64n : null;
+  const fixedGas =
+    gas?.floorGas && floorOnly !== null ? BigInt(gas.floorGas) - floorOnly : null;
   return (
     <div className="group lane-inspector">
       {detail.error && <p className="warning">{errorText(detail.error)}</p>}
@@ -278,19 +310,29 @@ function LaneEvidence({
       )}
       <h3>Gas, as reported</h3>
       <dl className="gas-columns">
-        {[
-          ["Declared verify", gas?.declaredVerifyGas],
-          ["Used verify", gas?.verifyGas ?? r.simulation.verifyGas],
-          ["Calldata floor", gas?.floorGas],
-          ["Receipt gas", gas?.gasUsed],
-        ].map(([label, value]) => (
-          <Fact label={label!} key={label}>
+        {(
+          [
+            ["Fixed", fixedGas],
+            ["Declared verify", gas?.declaredVerifyGas],
+            ["Used verify", gas?.verifyGas ?? r.simulation.verifyGas],
+            ["Calldata floor", floorOnly ?? gas?.floorGas],
+            ["Receipt gas", gas?.gasUsed],
+          ] as [string, string | bigint | null | undefined][]
+        ).map(([label, value]) => (
+          <Fact label={label} key={label}>
             {value === null || value === undefined
               ? "Unknown"
               : BigInt(value).toLocaleString()}
           </Fact>
         ))}
       </dl>
+      {floorOnly !== null && (
+        <p className="hint">
+          Calldata floor = {gas!.billedBytes!.toLocaleString()} billed bytes × 64.
+          The bill is the fixed part plus the larger of data and execution, or
+          this floor.
+        </p>
+      )}
       {gas?.declaredVerifyGas && gas.verifyGas && (
         <div className="gas-gauge">
           <label htmlFor="verify-gauge">

@@ -1,0 +1,579 @@
+/* Panels sit on the page ground; nothing inside them is a card. */
+.pane,
+.board {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 36px;
+}
+.pane-head h2 {
+  margin-right: auto;
+}
+.pane-head > p:not(.count) {
+  flex-basis: 100%;
+  order: 3;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+.count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.count > span:first-child {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 32px;
+  letter-spacing: -0.02em;
+}
+.count > span:last-child {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.facts-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+}
+.facts,
+.gas-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.set-aside {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* Status pills and tags */
+.pill,
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--sunk);
+  color: var(--ink-2);
+  font: 500 12px/16px var(--sans);
+  white-space: nowrap;
+}
+.pill::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pill[data-state="admitted"],
+.pill[data-state="sending"] {
+  background: var(--wait-tint);
+  color: var(--wait);
+}
+.pill[data-state="included"] {
+  background: var(--ok-tint);
+  color: var(--ok);
+}
+.pill[data-state="reverted"],
+.pill[data-state="expired"],
+.pill[data-state="refused"] {
+  background: var(--bad-tint);
+  color: var(--bad);
+}
+.tag {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font: 400 12px/16px var(--mono);
+}
+.tag.hot {
+  border-radius: 999px;
+  background: var(--hot-tint);
+  color: var(--hot);
+  font-family: var(--sans);
+  font-weight: 500;
+}
+
+/* Folds: one hairline between each, no boxes */
+.forms {
+  display: grid;
+  border-top: 1px solid var(--rule);
+}
+.fold {
+  border-bottom: 1px solid var(--rule);
+}
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 0;
+  color: var(--ink);
+}
+.fold > summary h3 {
+  display: grid;
+  gap: 2px;
+}
+.fold-hint {
+  color: var(--ink-3);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+}
+.fold[open] > summary .fold-hint {
+  display: none;
+}
+.fold > form {
+  padding: 4px 0 24px;
+}
+
+/* The key sheet: every one-time key, leaf 0 top-left */
+.key-sheet {
+  display: grid;
+  gap: 12px;
+}
+.key-sheet h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.key-sheet h4 span {
+  color: var(--ink-3);
+  font-size: 13px;
+  font-weight: 400;
+}
+.sheet-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 20px 32px;
+}
+.register {
+  display: grid;
+  grid-template-columns: repeat(32, 7px);
+  grid-auto-rows: 7px;
+  gap: 2px;
+  padding: 4px;
+  margin: -4px;
+  border-radius: 6px;
+  cursor: crosshair;
+}
+.register:focus-visible {
+  outline-offset: 0;
+}
+.leaf-cell {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+}
+.leaf-cell.is-hot,
+.leaf-cell.is-unused.in-hot {
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+.leaf-cell.is-phone {
+  box-shadow: inset 0 0 0 2px var(--hot);
+}
+.leaf-cell.is-onchain {
+  background: var(--cold);
+  box-shadow: none;
+}
+.leaf-cell.is-onchain.in-hot {
+  background: var(--hot);
+}
+.leaf-cell.is-flight {
+  background: var(--wait);
+  box-shadow: none;
+}
+.leaf-cell.is-burned {
+  background: var(--bad);
+  box-shadow: none;
+}
+.leaf-cell.at {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+.sheet-side {
+  display: grid;
+  gap: 16px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.sheet-readout {
+  min-height: 36px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 18px;
+}
+.sheet-readout .mono {
+  color: var(--ink);
+  font-weight: 500;
+}
+.legend {
+  display: grid;
+  gap: 8px;
+}
+.legend li {
+  display: grid;
+  grid-template-columns: 7px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 18px;
+}
+.legend .mono {
+  color: var(--ink);
+  font-size: 12px;
+  text-align: right;
+}
+
+/* Tickets on the phone: the same cells, larger */
+.stubs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.stub {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 2px var(--hot);
+}
+.stub.is-onchain {
+  background: var(--hot);
+  box-shadow: none;
+}
+.stub.is-flight {
+  background: var(--wait);
+  box-shadow: none;
+}
+.stub.is-burned {
+  background: var(--bad);
+  box-shadow: none;
+}
+.stub.next {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* Lane board */
+.board {
+  gap: 16px;
+  margin-top: 32px;
+}
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 12px 16px;
+}
+.board-head > div:first-child {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+}
+.board .scene {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+.board .scene-guide,
+.lane-rules {
+  position: relative;
+}
+.board .scene-guide[open] > p,
+.lane-rules[open] > p {
+  position: absolute;
+  z-index: 20;
+  top: 40px;
+  right: 0;
+  width: min(380px, calc(100vw - 48px));
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: var(--pop-shadow);
+  font-size: 13px;
+  line-height: 18px;
+}
+#lanes {
+  position: relative;
+  height: 320px;
+  min-height: 320px;
+  max-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-inline: -24px;
+}
+#lanes:focus-visible {
+  outline-offset: -2px;
+}
+#lanes > .warning {
+  margin: 12px 24px;
+}
+table.lanes {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.lanes col.w-lane {
+  width: 128px;
+}
+.lanes col.w-leaf {
+  width: 104px;
+}
+.lanes col.w-amount {
+  width: 120px;
+}
+.lanes col.w-gas {
+  width: 96px;
+}
+.lanes col.w-status {
+  width: 280px;
+}
+.lanes th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--sunk);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+.lanes th:first-child,
+.lanes td:first-child {
+  padding-left: 24px;
+}
+.lanes th:last-child,
+.lanes td:last-child {
+  padding-right: 24px;
+}
+.lanes th.r,
+.lanes td.amount,
+.lanes td.gas {
+  text-align: right;
+}
+.lanes td {
+  height: 44px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+.lane-row:hover > td {
+  background: color-mix(in srgb, var(--sunk) 55%, transparent);
+}
+/* Fills the fixed 320px lane box (36px header), so an empty board has no dead space. */
+.lanes td.empty {
+  height: 283px;
+  padding: 24px;
+  border-bottom: 0;
+  color: var(--ink-3);
+  text-align: center;
+  vertical-align: middle;
+}
+.lanes tr.ruled td {
+  height: 32px;
+  padding-block: 6px;
+  background: var(--bg);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lanes .sn,
+.lanes td.gas {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.lane-inspect {
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cold);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--cold) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.lane-inspect:hover {
+  background: var(--cold-tint);
+}
+.lanes td.leaf {
+  white-space: nowrap;
+}
+.lanes td.leaf .tag {
+  margin-left: 8px;
+}
+.cell-flex {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.lanes td .hint {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.amt.void {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.amt.single {
+  text-decoration: underline dotted var(--ink-3);
+  text-underline-offset: 4px;
+}
+.st {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.lanes .cell-flex {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.track {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.track li[data-state] {
+  width: 22px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule);
+}
+.track li[data-state="wait"] {
+  background: var(--wait);
+}
+.track li[data-state="done"] {
+  background: var(--ink-3);
+}
+.track li[data-state="ok"] {
+  background: var(--ok);
+}
+.track li[data-state="bad"] {
+  background: var(--bad);
+}
+.refusal,
+.st-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.refusal {
+  color: var(--bad);
+}
+.st-meta {
+  display: flex;
+  gap: 12px;
+  color: var(--ink-3);
+}
+.stamp small {
+  font-size: inherit;
+}
+
+/* Lane evidence */
+.lane-inspector {
+  display: grid;
+  gap: 12px;
+}
+.checks {
+  display: grid;
+  gap: 6px;
+}
+.check strong {
+  margin-right: 6px;
+  font-weight: 600;
+}
+.check-fail,
+.check-fail strong {
+  color: var(--bad);
+}
+.raw-timeline {
+  display: grid;
+  gap: 4px;
+  padding-left: 0;
+  font-size: 13px;
+}
+.raw-timeline time {
+  color: var(--ink-3);
+  font: 12px/18px var(--mono);
+}
+.gas-columns dd {
+  font-family: var(--mono);
+}
+.gas-gauge {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.gas-gauge meter {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--sunk);
+}
+.gas-gauge meter::-webkit-meter-bar {
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--sunk);
+}
+.gas-gauge meter::-webkit-meter-optimum-value,
+.gas-gauge meter::-webkit-meter-suboptimum-value {
+  border-radius: 3px;
+  background: var(--ink);
+}
+
+/* The pre-flight plan */
+.plan {
+  display: grid;
+  gap: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 18px;
+}
+.plan h3 {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+.plan-warnings {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-3);
+}
+.plan-warnings li {
+  max-width: 70ch;
+}

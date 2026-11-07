@@ -1,0 +1,159 @@
+<!doctype html>
+<!-- Winterlock Flask companion: connect, create and fund an account, then send using the Snap's one-time keys.
+     Written with Claude Code (AI) for Vicky. Redesigned with Codex (OpenAI) for Vicky. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Flask wallet, Winterlock</title>
+  <link rel="icon" href="data:,">
+  <link rel="preload" href="/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/ibm-plex-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/shell.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#workspace">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="http://127.0.0.1:5173/" data-workspace-page="/"><svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 9l6 15 6-15 6 15 6-15M10 9l6 15 6-15" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg><span>Winterlock</span></a>
+    <nav class="tabs" aria-label="Screens">
+      <a href="http://127.0.0.1:5173/" data-workspace-page="/">Wallets</a>
+      <a href="http://127.0.0.1:5173/hot-cold.html" data-workspace-page="/hot-cold.html">Pay</a>
+      <a href="http://127.0.0.1:5173/agent.html" data-workspace-page="/agent.html">Agent</a>
+      <a href="http://127.0.0.1:5173/session.html" data-workspace-page="/session.html">Session</a>
+      <a href="/" aria-current="page">Flask</a>
+    </nav>
+    <div class="topbar-end">
+      <span class="net-chip"><span class="dot" aria-hidden="true"></span>Devnet <span class="mono">1337</span></span>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Use dark theme" aria-pressed="false">
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <span class="visually-hidden">Dark appearance</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="workspace" class="page">
+  <div class="page-head">
+    <div>
+      <h1 id="page-title">Flask wallet</h1>
+      <p>Your keys stay in the Snap. Connect Flask to create your account and send with Winterlock.</p>
+    </div>
+    <span class="pill conn" id="connection-state">Flask required</span>
+  </div>
+
+  <p id="flask-missing" class="banner" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg><span>This local Snap runs in MetaMask Flask. <a href="https://docs.metamask.io/snaps/get-started/install-flask/" target="_blank" rel="noopener noreferrer">Install Flask</a> to continue. In Brave, choose Extensions (no fallback) as the Ethereum wallet.</span></p>
+
+  <div class="layout">
+    <ol class="steps" aria-label="Wallet setup">
+      <li class="step" data-phase="connect" aria-current="step">
+        <span class="step-mark" aria-hidden="true"><span class="n">1</span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <section class="step-body" aria-labelledby="s1">
+          <h2 id="s1">Connect Flask</h2>
+          <p class="step-copy">Install the Winterlock Snap in MetaMask Flask. The Snap generates and keeps your post-quantum signing keys.</p>
+          <div class="step-work">
+            <div class="actions"><button class="btn primary" id="connect" type="button">Connect Flask</button><button class="btn" id="add-devnet" type="button">Add devnet to Flask</button></div>
+            <p class="help">Need funds for setup? <button class="text-btn" id="faucet" type="button">Get 1 test ETH</button></p>
+          </div>
+          <p id="connect-result" class="result" aria-live="polite" hidden></p>
+          <details class="more" id="connection-details"><summary>Account and key details</summary>
+            <dl class="facts">
+              <div><dt>Flask funding account</dt><dd id="eoa" class="mono">Not connected</dd></div>
+              <div><dt>Funding balance</dt><dd id="eoa-balance" class="num">—</dd></div>
+              <div><dt>Flask network</dt><dd id="network">—</dd></div>
+              <div><dt>Snap key tree</dt><dd id="tree">—</dd></div>
+              <div><dt>Merkle root</dt><dd id="root" class="mono">—</dd></div>
+              <div><dt>Chain id</dt><dd id="chain" class="mono">—</dd></div>
+            </dl>
+          </details>
+        </section>
+      </li>
+
+      <li class="step" data-phase="account">
+        <span class="step-mark" aria-hidden="true"><span class="n">2</span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <section class="step-body" aria-labelledby="s2">
+          <h2 id="s2">Create your account</h2>
+          <p class="step-copy">Your Ethereum account in Flask pays the deployment gas. The signing keys stay inside the Winterlock Snap.</p>
+          <div id="no-account" class="step-work">
+            <div class="actions"><button class="btn primary" id="create" type="button">Create account using Flask</button><button class="btn" id="check-account" type="button" hidden>Check account</button></div>
+            <p class="help">Approximately 0.95M gas. Review and confirm the deployment in Flask.</p>
+          </div>
+          <div id="has-account" class="account" hidden>
+            <dl class="account-facts">
+              <div class="balance"><dt>Account balance</dt><dd id="account-balance">—</dd></div>
+              <div><dt>Winterlock account</dt><dd><a id="account-link" class="mono" target="_blank" rel="noopener noreferrer"></a></dd></div>
+            </dl>
+            <form id="fund-form" class="fund" novalidate>
+              <label class="label" for="fund-amount">Add ETH from your Flask account</label>
+              <div class="row">
+                <span class="amount"><input id="fund-amount" class="input num" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.05" required><span class="unit" aria-hidden="true">ETH</span></span>
+                <button class="btn" id="fund" type="submit">Fund from Flask</button>
+              </div>
+            </form>
+          </div>
+          <p id="lanes-wait" class="banner small" hidden>Waiting for pending lanes: a funding or deployment transaction could push them out of the block.</p>
+          <p id="account-result" class="result" aria-live="polite" hidden></p>
+        </section>
+      </li>
+
+      <li class="step" data-phase="send">
+        <span class="step-mark" aria-hidden="true"><span class="n">3</span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <section class="step-body" aria-labelledby="s3">
+          <h2 id="s3">Send with Winterlock</h2>
+          <p class="step-copy">The Snap signs each payment with a fresh one-time key, on its own lane.</p>
+          <p class="send-readiness" id="send-readiness">Create and fund your Winterlock account before sending.</p>
+          <form id="send-form" class="step-work form" novalidate>
+            <div class="field"><label class="label" for="send-to">Recipient</label><input id="send-to" class="input mono" name="to" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" required></div>
+            <div class="field"><label class="label" for="send-amount">Amount</label><span class="amount"><input id="send-amount" class="input num" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.001" required><span class="unit" aria-hidden="true">ETH</span></span></div>
+            <p class="signing-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg><span><strong>Signed inside the Snap</strong> A fresh leaf is used once. Confirm the payment in Flask.</span></p>
+            <div class="actions"><button class="btn primary" id="send" type="submit">Send with Winterlock Snap</button></div>
+          </form>
+          <p id="send-result" class="result" aria-live="polite" hidden></p>
+          <section class="activity" id="snap-activity" role="status" aria-live="polite" aria-label="Latest payment" hidden></section>
+        </section>
+      </li>
+
+      <li class="step" data-step="mm">
+        <span class="step-mark" aria-hidden="true"><span class="n">4</span></span>
+        <section class="step-body" aria-labelledby="s3m">
+          <h2 id="s3m">Send from MetaMask</h2>
+          <p class="step-copy">The same account as a MetaMask account. Flask shows its own confirmation, the Snap signs one fresh leaf, and the local bundler sends the frame transaction.</p>
+          <div class="step-work">
+            <div class="actions"><button class="btn" id="mm-add" type="button">Add to MetaMask</button></div>
+            <div class="bundler-well">
+              <p>Needs the bundler: <code>cd bundler &amp;&amp; bun src/main.ts</code>.</p>
+              <p id="bundler">Bundler: –</p>
+            </div>
+            <form id="mm-form" class="form" novalidate>
+              <div class="field"><label class="label" for="mm-to">Recipient</label><input id="mm-to" class="input mono" name="to" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" required></div>
+              <div class="field"><label class="label" for="mm-amount">Amount, in ETH</label><span class="amount"><input id="mm-amount" class="input num" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.001" required><span class="unit" aria-hidden="true">ETH</span></span></div>
+              <div class="actions"><button class="btn primary" id="mm-send" type="submit">Send from MetaMask</button></div>
+            </form>
+          </div>
+          <p id="mm-result" class="result" aria-live="polite" hidden></p>
+        </section>
+      </li>
+    </ol>
+
+    <aside class="keys" aria-labelledby="keys-title">
+      <div class="keys-head"><h2 id="keys-title">One-time keys</h2><span class="mono" id="keys-total">1,024</span></div>
+      <p class="help">One square per leaf in the Snap's key tree. Each leaf signs once.</p>
+      <div class="key-sheet" id="key-sheet" role="img" aria-label="No one-time keys used yet"></div>
+      <ul class="legend" id="key-legend"></ul>
+    </aside>
+  </div>
+
+  <section class="board" aria-labelledby="s4">
+    <div class="board-head"><h2 id="s4">Lane board</h2><p class="help">Each send uses its own leaf and nonce key. Follow its progress here.</p></div>
+    <div class="table-wrap"><table class="lanes"><caption class="visually-hidden">One row per leaf the Snap has used, newest first</caption><thead><tr><th scope="col">Leaf</th><th scope="col">Lane</th><th scope="col">Status</th><th scope="col">Transaction</th></tr></thead><tbody id="lanes"><tr><td colspan="4" class="empty">No sends yet. Connect Flask, create your account, then send with the Snap.</td></tr></tbody></table></div>
+    <p id="poll" class="help">The lane board updates after you connect.</p>
+  </section>
+</main>
+<footer id="status" class="status-line"><span>Alt-mempool devnet, chain 1337</span><span>The seed stays inside the Snap</span></footer>
+</body>
+</html>

@@ -173,18 +173,20 @@ while alt lanes are pending ([why](docs/devnet-evidence.md#parallel-lanes-and-th
 `agent.html` and `session.html`, each have a Play scene button that runs their story, and a Mempool switch between alt
 and public. Seeds, journals and keys live in `~/.winterlock`, never in the repository.
 
-**4. Retained MetaMask integration services.** The React workspace on `http://127.0.0.1:5173/` is the sole
-product frontend. The old separate Snap demo page and its server have been removed. The Snap signer, keyring and
-bundler remain in `snap/` and `bundler/`; their exact permitted UI origins are `localhost:5173` and `127.0.0.1:5173`.
-The current React controls use backend signing. A Snap connection/signing flow is not exposed in this UI.
-
-For extension development only:
+**4. From MetaMask Flask.** The React workspace on `http://127.0.0.1:5173/` signs through the backend. The Snap has
+its own page, `snap/site/`, on `http://localhost:15190`; the Snap answers both origins. Needs MetaMask Flask in Chrome
+(a separate profile, or regular MetaMask disabled) with a throwaway recovery phrase, and no other network on chain 1337.
 
 ```sh
-(cd pipeline && bun install && bun run build)
-(cd bundler && bun install && bun src/main.ts)          # bundler RPC on 15192
-(cd snap && bun install && npm run serve)               # extension bundle service on 15191
+(cd pipeline && bun install) && (cd bundler && bun install)
+cd snap && bun install && bun run dev    # pipeline core, bundler on 15192, the Snap on 15191, its page on 15190
 ```
+
+On `http://localhost:15190`, in order: Connect Flask (installs `local:http://localhost:15191`), Add devnet to Flask,
+Get 1 test ETH, Create account using Flask (confirm the factory call in Flask), Fund from Flask, then Send with
+Winterlock Snap, or Add to MetaMask and Send from MetaMask. The first connect builds the key tree in the Snap (up to
+30 s); the Snap keeps its leaf nodes, so later starts reuse them. Removing the Snap loses the account's keys: send its
+balance away first.
 
 ## How it works
 
@@ -610,8 +612,9 @@ removed with the legacy frontends; the cleanup is attributed separately. Per fil
 - This README and `docs/` (Nov 6): written with Claude Code from the measured runs, the code and Vicky's notes, and edited by Vicky; restructured on Nov 6, 22:45 IST, at Vicky's request, after the README of her own Hanvil and of ETHOnline winners, with the long material moved word for word into `docs/design.md`, `docs/gas.md`, `docs/parallel-lanes.md` and `docs/devnet-evidence.md`. The Day-0 probe scripts, kept outside this repository, were also written with Claude Code
 
 </details>
+- UI redesign (Nov 7), written with Claude Code (AI) with two Claude Opus agents building and Claude reviewing in the browser: the design system in `web/DESIGN.md` (light-first ink-on-paper palette, cold and hot colours that carry meaning only, IBM Plex, and the 32 × 32 key sheet of all 1,024 one-time keys); the React app's styles rewritten (`web/src/styles/`, about 4,600 lines of CSS down to about 1,900) with layout changes in `web/src/components/common.tsx`, `lanes.tsx`, `pages/hot-cold.tsx`, `pages/wallets.tsx` and `main.tsx`, and two e2e checks taught to see a button inside a closed fold; the Snap's page `snap/site/`, restored on Nov 7 for the MetaMask Flask flow, restyled to the same system with its own key sheet. No behaviour changed.
 
-Not written by us: `pipeline/src/codec/codec.ts` and `pipeline/src/codec/FrameTx.ts` are copied from [mempool-workshop-sidecar](https://github.com/forshtat/mempool-workshop-sidecar) at commit `2e22ff0a`, MIT, Copyright (c) 2023 Etherspot; Claude Code added only the header comments and changed one import path. `fakechain/src/sidecarRules.ts` ports the sidecar's admission rules (classifyFrame, recognizeValidationPrefix, validateStructuralRules, validateSignature, describeStructuredFailure) from the same commit, MIT, Copyright (c) 2023 Etherspot, so the fake refuses with the sidecar's own words. The production fonts in `web/src/styles/fonts/`, Manrope (`manrope-latin.woff2`) and IBM Plex Mono (`ibm-plex-mono-latin.woff2`), are upstream Google Fonts assets under the SIL Open Font License 1.1. Their original copyrights and licence texts are retained beside them (`OFL-Manrope.txt`, `OFL-IBMPlexMono.txt`) and included in the production build. Archivo/Besley and the companion-page copies were removed with the retired frontends.
+Not written by us: `pipeline/src/codec/codec.ts` and `pipeline/src/codec/FrameTx.ts` are copied from [mempool-workshop-sidecar](https://github.com/forshtat/mempool-workshop-sidecar) at commit `2e22ff0a`, MIT, Copyright (c) 2023 Etherspot; Claude Code added only the header comments and changed one import path. `fakechain/src/sidecarRules.ts` ports the sidecar's admission rules (classifyFrame, recognizeValidationPrefix, validateStructuralRules, validateSignature, describeStructuredFailure) from the same commit, MIT, Copyright (c) 2023 Etherspot, so the fake refuses with the sidecar's own words. The fonts, IBM Plex Sans and IBM Plex Mono, are IBM's, under the SIL Open Font License 1.1: the web app bundles them from the `@fontsource/ibm-plex-sans` and `@fontsource/ibm-plex-mono` packages, with their licence texts in the production build, and the Snap's page serves copies from `snap/site/fonts/` beside their OFL texts. The earlier Manrope, Archivo and Besley files were removed.
 
 ## Licence
 
